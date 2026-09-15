@@ -1,0 +1,406 @@
+# CEE | Code Execution Engine
+
+**A high-performance, Judge0-compatible code execution engine and CLI built in Go.**
+
+[![Go Version](https://img.shields.io/badge/go-1.22+-00ADD8?logo=go&logoColor=white)](https://golang.org)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![API: Judge0 Compatible](https://img.shields.io/badge/API-Judge0%20Compatible-blue.svg)](https://judge0.com)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
+[![Tests](<https://img.shields.io/badge/tests-16%20passed%20(0%20races)-success.svg>)]()
+[![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos-lightgrey.svg)]()
+[![User Guide](https://img.shields.io/badge/guide-step--by--step-orange.svg)](GUIDE.md)
+
+> Looking for a beginner-friendly tutorial? Read the complete [User Guide (GUIDE.md)](GUIDE.md).
+
+---
+
+## What is CEE?
+
+CEE (Code Execution Engine) is a self-hosted, drop-in replacement for Judge0 built from scratch in Go. It securely runs user-submitted code in isolated environments with strict resource constraints and returns execution output, metrics, and exit statuses with sub-millisecond scheduling overhead.
+
+### Key Features
+
+- **Judge0 API Compatible** - Complete drop-in replacement matching Judge0 endpoints and data schemas.
+- **Microsecond Synchronous Wakeup** - Zero-polling instant response on `?wait=true` requests using Go channels and Redis Pub/Sub.
+- **Tri-Engine Sandboxing** - Supports Linux Isolate (cgroups v2), Docker containers, and Native Process sandboxing.
+- **Dual Queue Architecture** - Embedded in-memory channel queue for single-node / CLI use, or distributed Redis queue for multi-node clusters.
+- **Integrated CLI (`cee`)** - One-shot local compilation and execution (`cee run`), server management (`cee server`), and diagnostics (`cee test`).
+- **Comprehensive Language Support** - Python, JavaScript, TypeScript, C, C++, Java, Go, Rust, Bash, and Multi-file archives.
+- **Defense-in-Depth Security** - Pre-execution static security scanner, SSRF validation on callback URLs, and command argument sanitization.
+- **Production Ready** - Caddy reverse proxy with automatic SSL, Prometheus metrics, and Docker Compose configs.
+
+---
+
+## How It Works
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│   Frontend   │────▶│   CEE API    │────▶│ Queue Engine │────▶│   Workers    │
+│   or CLI     │     │   (Go HTTP)  │     │Memory / Redis│     │ (Goroutines) │
+└──────────────┘     └──────────────┘     └──────────────┘     └──────┬───────┘
+                                                                      │
+                                                    ┌─────────────────┴─────────────────┐
+                                                    │                                   │
+                                             ┌──────▼──────┐                     ┌──────▼──────┐
+                                             │   Isolate   │                     │   Docker    │
+                                             │  (cgroups)  │         OR          │ (container) │
+                                             └──────┬──────┘                     └──────┬──────┘
+                                                    │                                   │
+                                                    └─────────────┬─────────────────────┘
+                                                                  │
+                                                    ┌─────────────▼─────────────┐
+                                                    │  Sandboxed Code Execution │
+                                                    │  (isolated, time-limited) │
+                                                    └───────────────────────────┘
+```
+
+---
+
+## Running CEE
+
+Pick the mode that matches your setup:
+
+| Mode                        | Prerequisites      | URL                           | TLS       | Build?           |
+| :-------------------------- | :----------------- | :---------------------------- | :-------- | :--------------- |
+| **1. CLI Only**             | Go installed       | Local terminal                | None      | `go build`       |
+| **2. Standalone Server**    | Go binary          | `http://localhost:3000`       | None      | `go build`       |
+| **3. Docker Compose (Dev)** | Docker Desktop     | `http://localhost:3000`       | None      | `docker compose` |
+| **4. Server (IP only)**     | Linux VPS + Docker | `http://<server-ip>`          | None      | `docker compose` |
+| **5. Server with Domain**   | VPS + DNS A record | `https://codebox.example.com` | Automatic | `docker compose` |
+
+---
+
+### Mode 1 — Using the `cee` CLI
+
+CEE includes a built-in CLI that can run source code directly on your machine without running any background server or database:
+
+```bash
+cd cee.io
+
+# Build the CLI binary (using make or build.sh)
+make build
+
+# Optional: Install cee to /usr/local/bin
+sudo make install
+
+# Run Python code directly
+./bin/cee run script.py --stdin "Hello World"
+
+# Run C++ code with automatic compilation
+./bin/cee run solution.cpp --stdin "10 20" --expected "30"
+
+# Run Go code
+./bin/cee run main.go
+
+# List all supported language IDs and compilers
+./bin/cee languages
+
+# Run self-diagnostic suite
+./bin/cee test
+```
+
+---
+
+### Mode 2 — Standalone Server (Zero External Dependencies)
+
+CEE includes an embedded in-memory channel queue. You can run the entire server and worker system as a single static binary without needing Redis or Docker:
+
+```bash
+cd cee.io
+
+# Start the server on port 3000
+./bin/cee server --port 3000
+
+# Check health
+curl http://localhost:3000/health
+
+# Submit Python code synchronously
+curl -X POST "http://localhost:3000/submissions?wait=true" \
+  -H "Content-Type: application/json" \
+  -d '{"language_id": 71, "source_code": "print(21 * 2)"}'
+```
+
+---
+
+### Mode 3 — Local Development with Docker Compose
+
+Runs the CEE service alongside Redis:
+
+**Prerequisites:** Docker Desktop
+
+```bash
+cd cee.io
+
+# Start CEE + Redis
+docker compose up -d
+
+# Verify health
+curl http://localhost:3000/health
+```
+
+The default development stack is configured with token `dev-token`:
+
+```bash
+curl -X POST "http://localhost:3000/submissions?wait=true" \
+  -H "Content-Type: application/json" \
+  -H "X-Auth-Token: dev-token" \
+  -d '{"language_id": 71, "source_code": "print(\"Hello from CEE!\")"}'
+```
+
+---
+
+### Mode 4 — Production Server Without a Domain (IP Only, Plain HTTP)
+
+For running on a VPS using its public IP address:
+
+```bash
+ssh root@<server-ip>
+git clone https://github.com/navneetguptacse/cee.git /opt/cee
+cd /opt/cee
+
+# Create environment configuration
+cat > .env <<EOF
+AUTH_TOKEN=$(openssl rand -hex 32)
+METRICS_TOKEN=$(openssl rand -hex 16)
+DOMAIN=
+WORKER_CPUS=2.0
+WORKER_MEMORY=2G
+EOF
+
+# Start production stack
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Test from your local machine:
+
+```bash
+curl http://<server-ip>/health
+
+curl -X POST "http://<server-ip>/submissions?wait=true" \
+  -H "Content-Type: application/json" \
+  -H "X-Auth-Token: <your-token>" \
+  -d '{"language_id": 71, "source_code": "print(10 + 20)"}'
+```
+
+---
+
+### Mode 5 — Production Server with Domain and HTTPS
+
+Same stack as Mode 4, plus automatic SSL certification from Let's Encrypt managed by Caddy.
+
+1. Point an `A` record at your server IP (e.g. `codebox.example.com`).
+2. Ensure ports `80` and `443` are open.
+3. Set `DOMAIN` in `.env`:
+
+```bash
+cd /opt/cee
+
+cat > .env <<EOF
+AUTH_TOKEN=$(openssl rand -hex 32)
+METRICS_TOKEN=$(openssl rand -hex 16)
+DOMAIN=codebox.example.com
+WORKER_CPUS=2.0
+WORKER_MEMORY=2G
+EOF
+
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Verify HTTPS access:
+
+```bash
+curl https://codebox.example.com/health
+```
+
+---
+
+## CLI Reference
+
+```text
+Usage:
+  cee [command]
+
+Available Commands:
+  run         Directly compile and execute a local source file
+  server      Start the CEE API server and execution workers
+  worker      Start a standalone CEE queue worker
+  submit      Submit code to a running CEE server
+  status      Fetch status of a submission by token
+  languages   List all supported programming languages
+  health      Check health of CEE API server
+  test        Run self-diagnostic execution test suite
+```
+
+### Examples
+
+**Run file locally:**
+
+```bash
+cee run solution.cpp --stdin "10 20" --expected "30"
+```
+
+**Submit to remote server:**
+
+```bash
+cee submit solution.py --url https://codebox.example.com --token secret --wait
+```
+
+**Query submission status:**
+
+```bash
+cee status c506ea63-d1b1-4c2f-8e84-7aaf5a89d98d --url https://codebox.example.com
+```
+
+---
+
+## API Reference
+
+### Submissions
+
+| Method   | Endpoint                        | Description                                        |
+| :------- | :------------------------------ | :------------------------------------------------- |
+| `POST`   | `/submissions`                  | Create asynchronous submission (returns `{token}`) |
+| `POST`   | `/submissions?wait=true`        | Create submission and wait for completed result    |
+| `GET`    | `/submissions/:token`           | Fetch execution result by token                    |
+| `DELETE` | `/submissions/:token`           | Delete submission from cache                       |
+| `POST`   | `/submissions/batch`            | Submit multiple submissions (up to 20)             |
+| `GET`    | `/submissions/batch?tokens=a,b` | Fetch results for multiple tokens                  |
+
+### System & Discovery
+
+| Method | Endpoint         | Description                                        |
+| :----- | :--------------- | :------------------------------------------------- |
+| `GET`  | `/health`        | Service health status and uptime                   |
+| `GET`  | `/metrics`       | Prometheus metrics scrape endpoint                 |
+| `GET`  | `/languages`     | List active supported languages                    |
+| `GET`  | `/languages/all` | List all languages including archived              |
+| `GET`  | `/languages/:id` | Language detail, source file, compile/run commands |
+| `GET`  | `/statuses`      | List all Judge0 status codes (1–14)                |
+| `GET`  | `/about`         | Service version and maintainer metadata            |
+| `GET`  | `/system_info`   | CPU, RAM, and OS telemetry                         |
+| `GET`  | `/config_info`   | Active execution limits and defaults               |
+| `GET`  | `/executor`      | Active sandbox engine and capabilities             |
+| `GET`  | `/workers`       | Active worker status                               |
+| `GET`  | `/statistics`    | Queue depth and completion counts                  |
+
+---
+
+## Supported Languages
+
+| ID     | Language             | Default Compiler                           | Default Runner    |
+| :----- | :------------------- | :----------------------------------------- | :---------------- |
+| **46** | Bash (5.0.17)        | None                                       | `bash script.sh`  |
+| **50** | C (GCC 9.2.0)        | `gcc -O2 -o a.out main.c`                  | `./a.out`         |
+| **54** | C++ (GCC 9.2.0)      | `g++ -O2 -std=c++17 -o a.out main.cpp`     | `./a.out`         |
+| **60** | Go (1.22.0)          | `go build -o a.out main.go`                | `./a.out`         |
+| **62** | Java (OpenJDK 17)    | `javac -cp .:/usr/local/lib/java/* *.java` | `java -cp . Main` |
+| **63** | JavaScript (Node 18) | None                                       | `node script.js`  |
+| **71** | Python (3.8.10)      | None                                       | `python3 main.py` |
+| **73** | Rust (1.75.0)        | `rustc -O -o a.out main.rs`                | `./a.out`         |
+| **74** | TypeScript (5.0.3)   | `tsc ts-main.ts --outDir .`                | `node ts-main.js` |
+| **89** | Multi-file program   | `compile` / `compile.sh`                   | `run` / `run.sh`  |
+
+_RapidAPI Compatibility Aliases:_ `92` (Python), `93` & `102` (JavaScript), `94` (TypeScript), `95` (Go).
+
+---
+
+## Status Codes
+
+| ID     | Status                  | Description                                       |
+| :----- | :---------------------- | :------------------------------------------------ |
+| **1**  | In Queue                | Submission is waiting in queue                    |
+| **2**  | Processing              | Submission is being executed                      |
+| **3**  | Accepted                | Code executed and passed all test constraints     |
+| **4**  | Wrong Answer            | Stdout did not match expected output              |
+| **5**  | Time Limit Exceeded     | Process exceeded CPU or wall-time limit           |
+| **6**  | Compilation Error       | Compilation failed or was rejected by static scan |
+| **7**  | Runtime Error (SIGSEGV) | Segmentation fault                                |
+| **8**  | Runtime Error (SIGXFSZ) | File size limit exceeded                          |
+| **9**  | Runtime Error (SIGFPE)  | Floating point exception (divide by zero)         |
+| **10** | Runtime Error (SIGABRT) | Program aborted                                   |
+| **11** | Runtime Error (NZEC)    | Non-zero exit code                                |
+| **12** | Runtime Error (Other)   | Other runtime errors                              |
+| **13** | Internal Error          | Infrastructure error                              |
+| **14** | Exec Format Error       | Binary format error                               |
+
+---
+
+## Configuration
+
+| Variable                    | Default                       | Description                                          |
+| :-------------------------- | :---------------------------- | :--------------------------------------------------- |
+| `AUTH_TOKEN`                | Blank                         | Space-separated list of authorized API tokens        |
+| `AUTH_HEADERS`              | `X-Auth-Token x-rapidapi-key` | Headers checked for API token                        |
+| `PORT`                      | `3000`                        | HTTP port to bind                                    |
+| `REDIS_URL`                 | Blank                         | Redis connection string (uses memory queue if empty) |
+| `EXECUTOR_TYPE`             | `auto`                        | `auto`, `isolate`, `docker`, or `process`            |
+| `WORKER_CONCURRENCY`        | `4`                           | Parallel execution goroutines                        |
+| `DEFAULT_CPU_TIME_LIMIT`    | `5.0`                         | Default CPU time limit in seconds                    |
+| `MAX_CPU_TIME_LIMIT`        | `15.0`                        | Maximum allowed CPU time limit                       |
+| `DEFAULT_WALL_TIME_LIMIT`   | `10.0`                        | Default wall-clock timeout in seconds                |
+| `MAX_WALL_TIME_LIMIT`       | `30.0`                        | Maximum allowed wall-clock timeout                   |
+| `DEFAULT_MEMORY_LIMIT`      | `128000`                      | Default memory limit in KB                           |
+| `MAX_MEMORY_LIMIT`          | `512000`                      | Maximum allowed memory limit in KB                   |
+| `MAX_PROCESSES`             | `60`                          | Process/thread limit                                 |
+| `RESULT_CACHE_TTL`          | `3600`                        | Redis result expiration in seconds                   |
+| `RATE_LIMIT_MAX_REQUESTS`   | `200`                         | Maximum requests per IP window                       |
+| `RATE_LIMIT_WINDOW_SECONDS` | `60`                          | Rate limit window in seconds                         |
+
+---
+
+## Security
+
+- **Multi-Engine Sandboxing** - Isolated namespaces, cgroups, or container boundaries.
+- **Network Isolation** - Code runs with network disabled (`NetworkMode: none`).
+- **Static Pre-Scan** - Pre-execution rejection of forbidden system calls (`ptrace`, `socket`, fork bombs) and sensitive paths (`/etc/shadow`, `/proc/self/`, `/var/run/docker.sock`).
+- **SSRF Prevention** - Webhook callback URLs are validated against private subnets, loopbacks, and cloud metadata addresses (`169.254.169.254`).
+- **Zip Slip Defense** - Multi-file ZIP extraction checks path containment and limits total uncompressed size to 20MB.
+- **Non-Root Execution** - Code runs as unprivileged user `runner` (UID 1001).
+
+---
+
+## Makefile Quick Reference
+
+| Command             | Action                                     |
+| :------------------ | :----------------------------------------- |
+| `make help`         | Display available targets                  |
+| `make build`        | Compile the static binary into `./bin/cee` |
+| `make install`      | Install `cee` binary to `/usr/local/bin`   |
+| `make test`         | Run test suite                             |
+| `make test-race`    | Run test suite with Go data race detector  |
+| `make fmt`          | Format code using `gofmt`                  |
+| `make vet`          | Static analysis with `go vet`              |
+| `make diag`         | Run self-diagnostic suite                  |
+| `make server`       | Start local API server on port 3000        |
+| `make worker`       | Start standalone worker                    |
+| `make docker-build` | Build language runner images               |
+| `make docker-up`    | Start local Docker Compose services        |
+| `make docker-down`  | Stop local Docker Compose services         |
+| `make clean`        | Clean build artifacts                      |
+
+---
+
+## Testing
+
+Run the automated test suite with race-condition detection:
+
+```bash
+make test-race
+# or: go test -v -race ./tests/...
+```
+
+All 16 test suites verify:
+
+- Synchronous wakeup latency
+- Batch submission processing
+- Pre-execution security filter
+- SSRF webhook validation
+- Base64 encoding/decoding
+- Expected output matching
+- Rate limiter enforcement
+
+---
+
+## License
+
+MIT License. See [LICENSE](LICENSE) for details.

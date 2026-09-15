@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test and Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          check-latest: true
+          cache: true
+
+      - name: Verify dependencies
+        run: |
+          go mod verify
+
+      - name: Check formatting
+        run: |
+          DIFF=$(gofmt -s -l .)
+          if [ -n "$DIFF" ]; then
+            echo "Unformatted files found:"
+            echo "$DIFF"
+            exit 1
+          fi
+
+      - name: Run static analysis (go vet)
+        run: |
+          go vet ./...
+
+      - name: Run tests with race detector
+        run: |
+          go test -v -race -covermode=atomic -coverprofile=coverage.txt ./tests/...
+
+      - name: Build CEE binary
+        run: |
+          make build
+
+      - name: Run self-diagnostics
+        run: |
+          ./bin/cee test
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage.txt
+          if-no-files-found: ignore

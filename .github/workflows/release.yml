@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build Release Binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            ext: ""
+          - os: linux
+            arch: arm64
+            ext: ""
+          - os: darwin
+            arch: amd64
+            ext: ""
+          - os: darwin
+            arch: arm64
+            ext: ""
+          - os: windows
+            arch: amd64
+            ext: ".exe"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Compile binary
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 0
+        run: |
+          OUTPUT_NAME="cee-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}"
+          mkdir -p dist
+          go build -ldflags="-s -w" -o "dist/${OUTPUT_NAME}" ./cmd/cee
+          cd dist
+          sha256sum "${OUTPUT_NAME}" > "${OUTPUT_NAME}.sha256"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cee-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/*
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: build-release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true

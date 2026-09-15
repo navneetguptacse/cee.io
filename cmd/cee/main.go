@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -204,29 +205,79 @@ func newWorkerCmd() *cobra.Command {
 	return cmd
 }
 
-// ── 3. cee run <file> ─────────────────────────────────────────────────────────
+// ── 3. cee run [file] ─────────────────────────────────────────────────────────
 func newRunCmd() *cobra.Command {
 	var stdin string
 	var expectedOutput string
 	var timeout float64
 	var execType string
+	var codeFlag string
+	var langFlag string
 
 	cmd := &cobra.Command{
-		Use:   "run <source-file>",
-		Short: "Directly compile and execute a local source file",
-		Args:  cobra.ExactArgs(1),
+		Use:   "run [source-file]",
+		Short: "Compile and execute a local source file or inline code",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			filePath := args[0]
-			content, err := os.ReadFile(filePath)
-			if err != nil {
-				return fmt.Errorf("failed reading file %s: %w", filePath, err)
+			var code string
+			var lang *languages.Language
+			var label string
+
+			// 1. Determine language if specified via flag
+			if langFlag != "" {
+				lang = parseLanguage(langFlag)
+				if lang == nil {
+					return fmt.Errorf("unrecognized language: %s (run 'cee languages' for supported languages)", langFlag)
+				}
 			}
 
-			langID := detectLanguageID(filePath)
-			if langID == 0 {
-				return fmt.Errorf("could not detect language for file extension: %s", filepath.Ext(filePath))
+			// 2. Resolve source code
+			if codeFlag != "" {
+				code = codeFlag
+				label = "inline"
+			} else if len(args) > 0 {
+				arg := args[0]
+				if fi, err := os.Stat(arg); err == nil && !fi.IsDir() {
+					content, err := os.ReadFile(arg)
+					if err != nil {
+						return fmt.Errorf("failed reading file %s: %w", arg, err)
+					}
+					code = string(content)
+					label = filepath.Base(arg)
+					if lang == nil {
+						langID := detectLanguageID(arg)
+						if langID == 0 {
+							return fmt.Errorf("could not detect language for file extension: %s (use -l to specify)", filepath.Ext(arg))
+						}
+						lang = languages.GetLanguageByID(langID)
+					}
+				} else {
+					// Argument is not a local file; treat as inline code string
+					code = arg
+					label = "inline"
+				}
+			} else {
+				// Check if stdin is piped
+				stat, err := os.Stdin.Stat()
+				if err == nil && (stat.Mode()&os.ModeCharDevice) == 0 {
+					bytes, err := io.ReadAll(os.Stdin)
+					if err != nil {
+						return fmt.Errorf("failed reading from stdin: %w", err)
+					}
+					code = string(bytes)
+					label = "stdin"
+				} else {
+					return fmt.Errorf("no source code provided: specify a file, use -c \"code\", or pipe code via stdin")
+				}
 			}
-			lang := languages.GetLanguageByID(langID)
+
+			if strings.TrimSpace(code) == "" {
+				return fmt.Errorf("source code is empty")
+			}
+
+			if lang == nil {
+				return fmt.Errorf("language not specified: please pass -l or --lang (e.g. -l py, -l js, -l go, -l cpp)")
+			}
 
 			cfg := config.Load()
 			if execType != "" {
@@ -246,7 +297,7 @@ func newRunCmd() *cobra.Command {
 
 			sub := &executor.ExecutionSubmission{
 				Token:                  "cli-run",
-				SourceCode:             string(content),
+				SourceCode:             code,
 				Language:               lang,
 				Stdin:                  stdin,
 				ExpectedOutput:         expectedOutput,
@@ -260,7 +311,7 @@ func newRunCmd() *cobra.Command {
 				RedirectStderrToStdout: false,
 			}
 
-			fmt.Printf("Executing %s (%s) with %s...\n", filepath.Base(filePath), lang.Name, execEngine.Type())
+			fmt.Printf("Executing %s (%s) with %s...\n", label, lang.Name, execEngine.Type())
 			start := time.Now()
 			res, err := execEngine.Execute(context.Background(), sub)
 			if err != nil {
@@ -301,6 +352,8 @@ func newRunCmd() *cobra.Command {
 		},
 	}
 
+	cmd.Flags().StringVarP(&codeFlag, "code", "c", "", "Inline source code string")
+	cmd.Flags().StringVarP(&langFlag, "lang", "l", "", "Language name or ID (e.g. py, js, go, cpp, rs)")
 	cmd.Flags().StringVar(&stdin, "stdin", "", "Standard input for the program")
 	cmd.Flags().StringVar(&expectedOutput, "expected", "", "Expected output to compare against")
 	cmd.Flags().Float64VarP(&timeout, "timeout", "t", 5.0, "Execution timeout in seconds")
@@ -308,36 +361,74 @@ func newRunCmd() *cobra.Command {
 	return cmd
 }
 
-// ── 4. cee submit <file> ──────────────────────────────────────────────────────
+// ── 4. cee submit [file] ──────────────────────────────────────────────────────
 func newSubmitCmd() *cobra.Command {
 	var apiURL string
 	var authToken string
 	var stdin string
 	var wait bool
-	var langID int
+	var codeFlag string
+	var langFlag string
 
 	cmd := &cobra.Command{
-		Use:   "submit <source-file>",
+		Use:   "submit [source-file]",
 		Short: "Submit code to a running CEE server",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			filePath := args[0]
-			content, err := os.ReadFile(filePath)
-			if err != nil {
-				return err
-			}
+			var code string
+			var lang *languages.Language
 
-			if langID == 0 {
-				langID = detectLanguageID(filePath)
-				if langID == 0 {
-					return fmt.Errorf("specify --lang ID")
+			if langFlag != "" {
+				lang = parseLanguage(langFlag)
+				if lang == nil {
+					return fmt.Errorf("unrecognized language: %s (run 'cee languages' for supported languages)", langFlag)
 				}
 			}
 
-			codeStr := string(content)
+			if codeFlag != "" {
+				code = codeFlag
+			} else if len(args) > 0 {
+				arg := args[0]
+				if fi, err := os.Stat(arg); err == nil && !fi.IsDir() {
+					content, err := os.ReadFile(arg)
+					if err != nil {
+						return err
+					}
+					code = string(content)
+					if lang == nil {
+						langID := detectLanguageID(arg)
+						if langID == 0 {
+							return fmt.Errorf("could not detect language for file: %s (use -l to specify)", arg)
+						}
+						lang = languages.GetLanguageByID(langID)
+					}
+				} else {
+					code = arg
+				}
+			} else {
+				stat, err := os.Stdin.Stat()
+				if err == nil && (stat.Mode()&os.ModeCharDevice) == 0 {
+					bytes, err := io.ReadAll(os.Stdin)
+					if err != nil {
+						return fmt.Errorf("failed reading from stdin: %w", err)
+					}
+					code = string(bytes)
+				} else {
+					return fmt.Errorf("no source code provided: specify a file, use -c \"code\", or pipe code via stdin")
+				}
+			}
+
+			if strings.TrimSpace(code) == "" {
+				return fmt.Errorf("source code is empty")
+			}
+
+			if lang == nil {
+				return fmt.Errorf("language not specified: please pass -l or --lang (e.g. -l py, -l js, -l go)")
+			}
+
 			subReq := api.SubmissionRequest{
-				SourceCode: &codeStr,
-				LanguageID: langID,
+				SourceCode: &code,
+				LanguageID: lang.ID,
 			}
 			if stdin != "" {
 				subReq.Stdin = &stdin
@@ -376,9 +467,10 @@ func newSubmitCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&apiURL, "url", "http://localhost:3000", "CEE server URL")
 	cmd.Flags().StringVar(&authToken, "token", "", "Authentication token")
-	cmd.Flags().StringVar(&stdin, "stdin", "", "Standard input")
+	cmd.Flags().StringVarP(&codeFlag, "code", "c", "", "Inline source code string")
+	cmd.Flags().StringVarP(&langFlag, "lang", "l", "", "Language name or ID (e.g. python, py, js, 71)")
+	cmd.Flags().StringVar(&stdin, "stdin", "", "Standard input for the program")
 	cmd.Flags().BoolVarP(&wait, "wait", "w", true, "Wait for execution completion")
-	cmd.Flags().IntVarP(&langID, "lang", "l", 0, "Language ID (auto-detected if omitted)")
 	return cmd
 }
 
@@ -540,5 +632,44 @@ func detectLanguageID(path string) int {
 		return languages.LangMultiFile
 	default:
 		return 0
+	}
+}
+
+func parseLanguage(s string) *languages.Language {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if s == "" {
+		return nil
+	}
+
+	if id, err := strconv.Atoi(s); err == nil {
+		return languages.GetLanguageByID(id)
+	}
+
+	switch s {
+	case "py", "python", "python3":
+		return languages.GetLanguageByID(languages.LangPython)
+	case "js", "javascript", "node", "nodejs":
+		return languages.GetLanguageByID(languages.LangJavaScript)
+	case "ts", "typescript":
+		return languages.GetLanguageByID(languages.LangTypeScript)
+	case "go", "golang":
+		return languages.GetLanguageByID(languages.LangGo)
+	case "cpp", "c++", "g++":
+		return languages.GetLanguageByID(languages.LangCPP)
+	case "c", "gcc":
+		return languages.GetLanguageByID(languages.LangC)
+	case "java", "openjdk":
+		return languages.GetLanguageByID(languages.LangJava)
+	case "rs", "rust":
+		return languages.GetLanguageByID(languages.LangRust)
+	case "sh", "bash", "shell":
+		return languages.GetLanguageByID(languages.LangBash)
+	default:
+		for _, l := range languages.GetAllLanguages() {
+			if strings.Contains(strings.ToLower(l.Name), s) {
+				return l
+			}
+		}
+		return nil
 	}
 }

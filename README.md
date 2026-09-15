@@ -83,6 +83,13 @@ make build
 # Optional: Install cee to /usr/local/bin
 sudo make install
 
+# Run inline code directly
+./bin/cee run -c "print(100 * 5)" -l py
+./bin/cee run "console.log(21 * 2)" -l js
+
+# Pipe code via stdin
+echo "print('hello from stdin')" | ./bin/cee run -l py
+
 # Run Python code directly
 ./bin/cee run script.py --stdin "Hello World"
 
@@ -232,6 +239,14 @@ Available Commands:
 ```
 
 ### Examples
+
+**Run inline code directly:**
+
+```bash
+cee run -c "print(100 * 5)" -l py
+cee run "console.log(21 * 2)" -l js
+echo "print(42)" | cee run -l py
+```
 
 **Run file locally:**
 

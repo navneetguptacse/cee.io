@@ -26,7 +26,6 @@ var (
 )
 
 func init() {
-	// Base canonical languages
 	langs := []*Language{
 		{
 			ID:         LangBash,
@@ -135,13 +134,12 @@ func init() {
 		activeList = append(activeList, l)
 	}
 
-	// RapidAPI Judge0 CE Extra aliases
 	aliases := map[int]int{
-		92:  LangPython,     // Python 3.11
-		93:  LangJavaScript, // Node 18.15
-		94:  LangTypeScript, // TypeScript 5.0
-		95:  LangGo,         // Go
-		102: LangJavaScript, // Node 22
+		92:  LangPython,
+		93:  LangJavaScript,
+		94:  LangTypeScript,
+		95:  LangGo,
+		102: LangJavaScript,
 	}
 
 	for aliasID, targetID := range aliases {

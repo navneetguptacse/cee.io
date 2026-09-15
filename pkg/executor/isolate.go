@@ -40,7 +40,6 @@ func (e *IsolateExecutor) Execute(ctx context.Context, sub *ExecutionSubmission)
 	boxID := e.allocateBoxID()
 	lang := sub.Language
 
-	// 1. Initialize isolate sandbox
 	initCmd := exec.CommandContext(ctx, "isolate", "--init", fmt.Sprintf("--box-id=%d", boxID), "--cg")
 	initOut, err := initCmd.Output()
 	if err != nil {
@@ -53,7 +52,6 @@ func (e *IsolateExecutor) Execute(ctx context.Context, sub *ExecutionSubmission)
 		_ = exec.Command("isolate", "--cleanup", fmt.Sprintf("--box-id=%d", boxID), "--cg").Run()
 	}()
 
-	// 2. Write source code or multi-file archives
 	if lang.ID == languages.LangMultiFile {
 		if sub.AdditionalFiles == "" {
 			return &ExecutionResult{
@@ -82,13 +80,11 @@ func (e *IsolateExecutor) Execute(ctx context.Context, sub *ExecutionSubmission)
 		}
 	}
 
-	// 3. Stdin file
 	stdinPath := filepath.Join(workDir, "_stdin.txt")
 	if err := os.WriteFile(stdinPath, []byte(sub.Stdin), 0644); err != nil {
 		return nil, err
 	}
 
-	// 4. Compile step
 	if lang.CompileCmd != "" {
 		compileCmd := lang.CompileCmd
 		if sub.CompilerOptions != "" {
@@ -117,7 +113,6 @@ func (e *IsolateExecutor) Execute(ctx context.Context, sub *ExecutionSubmission)
 		}
 	}
 
-	// 5. Run step
 	runCmd := lang.RunCmd
 	if sub.CommandLineArguments != "" {
 		runCmd += " " + sub.CommandLineArguments
@@ -228,7 +223,7 @@ func (e *IsolateExecutor) runIsolate(ctx context.Context, boxID int, workDir str
 	defer cancel()
 
 	cmd := exec.CommandContext(runCtx, "isolate", args...)
-	_ = cmd.Run() // isolate exits non-zero on TLE/RE
+	_ = cmd.Run()
 
 	stdoutB, _ := os.ReadFile(filepath.Join(workDir, "_stdout.txt"))
 	stderrB, _ := os.ReadFile(filepath.Join(workDir, "_stderr.txt"))

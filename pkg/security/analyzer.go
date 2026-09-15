@@ -115,7 +115,6 @@ func AnalyzeCode(sourceCode string, languageID int) ScanResult {
 		return ScanResult{Rejected: false}
 	}
 
-	// 1. Universal sensitive paths
 	for _, p := range sensitivePaths {
 		if p.MatchString(sourceCode) {
 			return ScanResult{
@@ -125,7 +124,6 @@ func AnalyzeCode(sourceCode string, languageID int) ScanResult {
 		}
 	}
 
-	// 2. Language-specific patterns
 	var rules []patternRule
 	switch languageID {
 	case languages.LangC, languages.LangCPP:

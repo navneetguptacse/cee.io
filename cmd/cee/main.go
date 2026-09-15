@@ -31,7 +31,6 @@ var rootCmd = &cobra.Command{
 }
 
 func main() {
-	// Setup structured JSON logger
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 
@@ -52,7 +51,6 @@ func init() {
 	rootCmd.AddCommand(newSelfTestCmd())
 }
 
-// ── 1. cee server ─────────────────────────────────────────────────────────────
 func newServerCmd() *cobra.Command {
 	var port int
 	var redisURL string
@@ -77,13 +75,11 @@ func newServerCmd() *cobra.Command {
 				cfg.Executor.Type = execType
 			}
 
-			// Initialize Executor
 			execEngine, err := executor.NewExecutor(cfg)
 			if err != nil {
 				return fmt.Errorf("failed to initialize executor: %w", err)
 			}
 
-			// Initialize Queue (Redis if configured, otherwise high-speed in-memory)
 			var q queue.Queue
 			if cfg.Redis.URL != "" && cfg.Redis.URL != "none" {
 				rq, err := queue.NewRedisQueue(cfg.Redis.URL, cfg.Cache.ResultTTLSeconds)
@@ -100,12 +96,10 @@ func newServerCmd() *cobra.Command {
 			}
 			defer q.Close()
 
-			// Start Worker Pool
 			workerPool := queue.NewWorkerPool(q, execEngine, cfg.Worker.Concurrency)
 			workerPool.Start()
 			defer workerPool.Stop()
 
-			// Setup Router
 			router := api.NewRouter(cfg, q, execEngine)
 			addr := fmt.Sprintf(":%d", cfg.Server.Port)
 			server := &http.Server{
@@ -122,7 +116,6 @@ func newServerCmd() *cobra.Command {
 				"concurrency", cfg.Worker.Concurrency,
 			)
 
-			// Graceful shutdown on SIGTERM / SIGINT
 			stopCh := make(chan os.Signal, 1)
 			signal.Notify(stopCh, syscall.SIGINT, syscall.SIGTERM)
 
@@ -153,7 +146,6 @@ func newServerCmd() *cobra.Command {
 	return cmd
 }
 
-// ── 2. cee worker ─────────────────────────────────────────────────────────────
 func newWorkerCmd() *cobra.Command {
 	var redisURL string
 	var concurrency int
@@ -205,7 +197,6 @@ func newWorkerCmd() *cobra.Command {
 	return cmd
 }
 
-// ── 3. cee run [file] ─────────────────────────────────────────────────────────
 func newRunCmd() *cobra.Command {
 	var stdin string
 	var expectedOutput string
@@ -223,7 +214,6 @@ func newRunCmd() *cobra.Command {
 			var lang *languages.Language
 			var label string
 
-			// 1. Determine language if specified via flag
 			if langFlag != "" {
 				lang = parseLanguage(langFlag)
 				if lang == nil {
@@ -231,7 +221,6 @@ func newRunCmd() *cobra.Command {
 				}
 			}
 
-			// 2. Resolve source code
 			if codeFlag != "" {
 				code = codeFlag
 				label = "inline"
@@ -252,12 +241,10 @@ func newRunCmd() *cobra.Command {
 						lang = languages.GetLanguageByID(langID)
 					}
 				} else {
-					// Argument is not a local file; treat as inline code string
 					code = arg
 					label = "inline"
 				}
 			} else {
-				// Check if stdin is piped
 				stat, err := os.Stdin.Stat()
 				if err == nil && (stat.Mode()&os.ModeCharDevice) == 0 {
 					bytes, err := io.ReadAll(os.Stdin)
@@ -283,7 +270,7 @@ func newRunCmd() *cobra.Command {
 			if execType != "" {
 				cfg.Executor.Type = execType
 			} else {
-				cfg.Executor.Type = "process" // fast native for one-shot CLI
+				cfg.Executor.Type = "process"
 			}
 
 			execEngine, err := executor.NewExecutor(cfg)
@@ -474,7 +461,6 @@ func newSubmitCmd() *cobra.Command {
 	return cmd
 }
 
-// ── 5. cee status <token> ─────────────────────────────────────────────────────
 func newStatusCmd() *cobra.Command {
 	var apiURL string
 	var authToken string
@@ -513,7 +499,6 @@ func newStatusCmd() *cobra.Command {
 	return cmd
 }
 
-// ── 6. cee languages ──────────────────────────────────────────────────────────
 func newLanguagesCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "languages",
@@ -536,7 +521,6 @@ func newLanguagesCmd() *cobra.Command {
 	}
 }
 
-// ── 7. cee health ─────────────────────────────────────────────────────────────
 func newHealthCmd() *cobra.Command {
 	var apiURL string
 	cmd := &cobra.Command{
@@ -558,7 +542,6 @@ func newHealthCmd() *cobra.Command {
 	return cmd
 }
 
-// ── 8. cee test ───────────────────────────────────────────────────────────────
 func newSelfTestCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "test",
@@ -573,7 +556,6 @@ func newSelfTestCmd() *cobra.Command {
 				return err
 			}
 
-			// Test 1: Python
 			pySub := &executor.ExecutionSubmission{
 				Token:         "test-py",
 				SourceCode:    "print(21 * 2)",
@@ -587,7 +569,6 @@ func newSelfTestCmd() *cobra.Command {
 			}
 			fmt.Println("  [PASS] Python execution verified (21 * 2 = 42)")
 
-			// Test 2: Timeout detection
 			timeoutSub := &executor.ExecutionSubmission{
 				Token:         "test-timeout",
 				SourceCode:    "import time; time.sleep(10)",

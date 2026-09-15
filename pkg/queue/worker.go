@@ -89,11 +89,9 @@ func (wp *WorkerPool) processJob(job *SubmissionJob) {
 	token := job.Token
 	slog.Info("job_started", "token", token, "language_id", job.LanguageID)
 
-	// 1. Update status to Processing (2)
 	job.SetStatus(languages.GetStatusByID(languages.StatusProcessing))
 	_ = wp.queue.UpdateSubmission(wp.ctx, job)
 
-	// 2. Pre-execution static security scan
 	scan := security.AnalyzeCode(job.SourceCode, job.LanguageID)
 	if scan.Rejected {
 		slog.Warn("code_rejected", "token", token, "reason", scan.Reason)
@@ -110,7 +108,6 @@ func (wp *WorkerPool) processJob(job *SubmissionJob) {
 		return
 	}
 
-	// 3. Run execution
 	sub := JobToExecutionSubmission(job)
 	execRes, err := wp.executor.Execute(wp.ctx, sub)
 	if err != nil {
@@ -128,7 +125,6 @@ func (wp *WorkerPool) processJob(job *SubmissionJob) {
 		return
 	}
 
-	// 4. Populate execution results with mutex protection
 	nowStr := time.Now().UTC().Format(time.RFC3339)
 	job.mu.Lock()
 	job.Status = execRes.Status
@@ -143,7 +139,6 @@ func (wp *WorkerPool) processJob(job *SubmissionJob) {
 	job.ExitSignal = execRes.ExitSignal
 	job.FinishedAt = &nowStr
 
-	// 5. Compare with Expected Output
 	if job.ExpectedOutput != "" && job.Status.ID == languages.StatusAccepted {
 		actual := ""
 		if job.Stdout != nil {
@@ -162,19 +157,16 @@ func (wp *WorkerPool) processJob(job *SubmissionJob) {
 func (wp *WorkerPool) finalizeJob(job *SubmissionJob, durationSec float64) {
 	status := job.GetStatus()
 
-	// Record metrics
 	langName := strconv.Itoa(job.LanguageID)
 	if job.Language != nil {
 		langName = job.Language.Name
 	}
 	metrics.RecordSubmission(status.Description, langName, durationSec)
 
-	// Send webhook callback if configured
 	if job.CallbackURL != "" {
 		go wp.sendCallback(job)
 	}
 
-	// Signal queue that job is complete (instant wakeup for sync callers)
 	wp.queue.SignalCompleted(job.Token, job)
 
 	slog.Info("job_completed",

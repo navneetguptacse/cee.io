@@ -224,7 +224,6 @@ func (h *Handler) CreateSubmission(w http.ResponseWriter, r *http.Request) {
 	fields := parseFields(r.URL.Query().Get("fields"))
 
 	if wait {
-		// Instant zero-latency channel/pubsub sync wait!
 		completedJob, err := h.queue.WaitForResult(r.Context(), job.Token, 30*time.Second)
 		if err != nil || completedJob == nil {
 			completedJob = job
@@ -331,7 +330,6 @@ func (h *Handler) GetBatchSubmission(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]any{"submissions": submissions})
 }
 
-// Helper validation & conversion logic
 func (h *Handler) buildJobFromRequest(req *SubmissionRequest, base64Encoded bool) (*queue.SubmissionJob, error) {
 	lang := languages.GetLanguageByID(req.LanguageID)
 	if lang == nil {
@@ -368,7 +366,6 @@ func (h *Handler) buildJobFromRequest(req *SubmissionRequest, base64Encoded bool
 		return nil, fmt.Errorf("language_id 89 (multi-file) requires additional_files ZIP")
 	}
 
-	// Validate callback URL against SSRF
 	var callbackURL string
 	if req.CallbackURL != nil && *req.CallbackURL != "" {
 		if err := security.ValidateCallbackURL(*req.CallbackURL); err != nil {
@@ -377,7 +374,6 @@ func (h *Handler) buildJobFromRequest(req *SubmissionRequest, base64Encoded bool
 		callbackURL = *req.CallbackURL
 	}
 
-	// Compute execution limits
 	cpuLimit := h.cfg.Execution.DefaultCPUTimeLimit
 	if req.CPUTimeLimit != nil && *req.CPUTimeLimit > 0 {
 		cpuLimit = *req.CPUTimeLimit
@@ -452,7 +448,7 @@ func (h *Handler) buildJobFromRequest(req *SubmissionRequest, base64Encoded bool
 		CompilerOptions:        compilerOptions,
 		CommandLineArguments:   cmdArgs,
 		RedirectStderrToStdout: redirectStderr,
-		EnableNetwork:          false, // always isolated
+		EnableNetwork:          false,
 		CallbackURL:            callbackURL,
 		AdditionalFiles:        additionalFiles,
 		Status:                 languages.GetStatusByID(languages.StatusInQueue),
@@ -485,7 +481,6 @@ func formatJobResponse(job *queue.SubmissionJob, base64Encode bool, fields map[s
 		return resp
 	}
 
-	// Filter fields if requested
 	rawMap, _ := json.Marshal(resp)
 	var fullMap map[string]any
 	_ = json.Unmarshal(rawMap, &fullMap)

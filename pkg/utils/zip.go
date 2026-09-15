@@ -36,7 +36,6 @@ func ExtractZipFromBase64(b64Zip string, destDir string) error {
 	cleanDestDir := filepath.Clean(destDir)
 
 	for _, file := range reader.File {
-		// Clean and validate path against Zip Slip
 		cleanedPath := filepath.Clean(file.Name)
 		if strings.HasPrefix(cleanedPath, "..") || filepath.IsAbs(cleanedPath) {
 			return fmt.Errorf("zip archive contains dangerous path: %s", file.Name)
@@ -69,7 +68,6 @@ func ExtractZipFromBase64(b64Zip string, destDir string) error {
 			return err
 		}
 
-		// Enforce decompression size limit (Zip Bomb protection)
 		lr := io.LimitReader(srcFile, MaxZipSize-totalExtractedBytes+1)
 		written, err := io.Copy(outFile, lr)
 		srcFile.Close()

@@ -15,9 +15,7 @@ func SanitizeOptions(options string) string {
 	if options == "" {
 		return ""
 	}
-	// Strip all characters not in whitelist
 	cleaned := disallowedChars.ReplaceAllString(options, "")
-	// Collapse multiple spaces
 	cleaned = multipleSpaces.ReplaceAllString(cleaned, " ")
 	return strings.TrimSpace(cleaned)
 }

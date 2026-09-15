@@ -11,15 +11,15 @@ var blockedCIDRs []*net.IPNet
 
 func init() {
 	cidrs := []string{
-		"127.0.0.0/8",    // IPv4 loopback
-		"10.0.0.0/8",     // RFC1918
-		"172.16.0.0/12",  // RFC1918
-		"192.168.0.0/16", // RFC1918
-		"169.254.0.0/16", // IPv4 Link-local / Cloud Metadata
-		"0.0.0.0/8",      // Current network
-		"::1/128",        // IPv6 loopback
-		"fc00::/7",       // IPv6 Unique Local
-		"fe80::/10",      // IPv6 Link-local
+		"127.0.0.0/8",
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"169.254.0.0/16",
+		"0.0.0.0/8",
+		"::1/128",
+		"fc00::/7",
+		"fe80::/10",
 	}
 
 	for _, c := range cidrs {
@@ -54,10 +54,8 @@ func ValidateCallbackURL(rawURL string) error {
 		return fmt.Errorf("callback URL points to prohibited internal hostname")
 	}
 
-	// Resolve IP addresses to prevent DNS rebinding to internal IPs
 	ips, err := net.LookupIP(hostname)
 	if err != nil {
-		// If direct IP parsing works, check that
 		ip := net.ParseIP(hostname)
 		if ip == nil {
 			return fmt.Errorf("failed to resolve callback hostname: %w", err)

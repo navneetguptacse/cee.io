@@ -24,7 +24,6 @@ func (p *ResultParser) Parse(raw *RawExecution, sub *ExecutionSubmission) *Execu
 	} else if raw.ExitCode == 0 {
 		status = languages.GetStatusByID(languages.StatusAccepted)
 	} else {
-		// Detect signals from exit code (128 + signal) or direct signal codes
 		switch raw.ExitCode {
 		case 137, 9:
 			status = languages.GetStatusByID(languages.StatusTimeLimitExceeded)

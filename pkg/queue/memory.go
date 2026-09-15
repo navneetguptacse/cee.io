@@ -115,10 +115,8 @@ func (q *MemoryQueue) SignalCompleted(token string, job *SubmissionJob) {
 	metrics.QueueProcessing.Set(float64(atomic.LoadInt64(&q.processing)))
 
 	snap := job.Snapshot()
-	// Update in store
 	q.store.Store(token, snap)
 
-	// Notify waiting synchronous callers immediately
 	if chVal, ok := q.listeners.LoadAndDelete(token); ok {
 		ch := chVal.(chan *SubmissionJob)
 		select {
@@ -130,7 +128,6 @@ func (q *MemoryQueue) SignalCompleted(token string, job *SubmissionJob) {
 }
 
 func (q *MemoryQueue) WaitForResult(ctx context.Context, token string, timeout time.Duration) (*SubmissionJob, error) {
-	// First check if already finished
 	if job, _ := q.GetSubmission(ctx, token); job != nil && job.IsFinished() {
 		return job, nil
 	}
@@ -138,7 +135,6 @@ func (q *MemoryQueue) WaitForResult(ctx context.Context, token string, timeout t
 	ch := make(chan *SubmissionJob, 1)
 	q.listeners.Store(token, ch)
 
-	// Re-check after storing listener in case completed right in between
 	if job, _ := q.GetSubmission(ctx, token); job != nil && job.IsFinished() {
 		q.listeners.Delete(token)
 		return job, nil

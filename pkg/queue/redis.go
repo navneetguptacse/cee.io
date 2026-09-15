@@ -52,13 +52,11 @@ func (q *RedisQueue) Enqueue(ctx context.Context, job *SubmissionJob) error {
 		return err
 	}
 
-	// 1. Cache state in Redis
 	key := fmt.Sprintf("submission:%s", job.Token)
 	if err := q.rdb.Set(ctx, key, data, q.ttl).Err(); err != nil {
 		return fmt.Errorf("redis set error: %w", err)
 	}
 
-	// 2. Push token to work queue
 	if err := q.rdb.LPush(ctx, QueueNameSubmissions, job.Token).Err(); err != nil {
 		return fmt.Errorf("redis lpush error: %w", err)
 	}
@@ -148,26 +146,22 @@ func (q *RedisQueue) SignalCompleted(token string, job *SubmissionJob) {
 	ctx := context.Background()
 	_ = q.UpdateSubmission(ctx, job)
 
-	// Publish to Redis PubSub for real-time instant cross-node synchronization
 	channel := ChannelSubmissionPrefix + token
 	_ = q.rdb.Publish(ctx, channel, token).Err()
 }
 
 func (q *RedisQueue) WaitForResult(ctx context.Context, token string, timeout time.Duration) (*SubmissionJob, error) {
-	// 1. First check if already finished
 	job, _ := q.GetSubmission(ctx, token)
 	if job != nil && job.Status.ID > languages.StatusProcessing {
 		return job, nil
 	}
 
-	// 2. Subscribe to Redis pubsub channel
 	channel := ChannelSubmissionPrefix + token
 	pubsub := q.rdb.Subscribe(ctx, channel)
 	defer pubsub.Close()
 
 	ch := pubsub.Channel()
 
-	// Re-check after subscribe
 	job, _ = q.GetSubmission(ctx, token)
 	if job != nil && job.Status.ID > languages.StatusProcessing {
 		return job, nil

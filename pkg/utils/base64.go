@@ -29,7 +29,7 @@ func DecodeIfNeeded(s string, base64Encoded bool) string {
 	}
 	decoded, err := DecodeBase64(s)
 	if err != nil {
-		return s // fallback to raw string if decoding fails
+		return s
 	}
 	return decoded
 }

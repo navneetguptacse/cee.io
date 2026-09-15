@@ -55,7 +55,6 @@ func (d *DockerExecutor) Execute(ctx context.Context, sub *ExecutionSubmission) 
 		boxSizeMB = 128
 	}
 
-	// 1. Create secure sandbox container
 	containerConfig := &container.Config{
 		Image:        lang.Image,
 		Cmd:          []string{"/bin/sh", "-c", "sleep 3600"},
@@ -77,9 +76,9 @@ func (d *DockerExecutor) Execute(ctx context.Context, sub *ExecutionSubmission) 
 		NetworkMode: netMode,
 		Resources: container.Resources{
 			Memory:     int64(effectiveMem) * 1024,
-			MemorySwap: int64(effectiveMem) * 1024, // disable swap
+			MemorySwap: int64(effectiveMem) * 1024,
 			CPUPeriod:  100000,
-			CPUQuota:   100000, // 1 CPU
+			CPUQuota:   100000,
 			PidsLimit:  func() *int64 { v := int64(sub.MaxProcesses); return &v }(),
 		},
 		ReadonlyRootfs: true,
@@ -118,12 +117,10 @@ func (d *DockerExecutor) Execute(ctx context.Context, sub *ExecutionSubmission) 
 		_ = d.cli.ContainerRemove(context.Background(), containerID, container.RemoveOptions{Force: true})
 	}()
 
-	// 2. Start container
 	if err := d.cli.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
 		return nil, fmt.Errorf("failed to start container: %w", err)
 	}
 
-	// 3. Inject source code or multi-file archives
 	if lang.ID == languages.LangMultiFile {
 		if sub.AdditionalFiles == "" {
 			return &ExecutionResult{
@@ -152,7 +149,6 @@ func (d *DockerExecutor) Execute(ctx context.Context, sub *ExecutionSubmission) 
 		}
 	}
 
-	// 4. Compile step
 	if lang.CompileCmd != "" {
 		compileCmd := lang.CompileCmd
 		if sub.CompilerOptions != "" {
@@ -181,7 +177,6 @@ func (d *DockerExecutor) Execute(ctx context.Context, sub *ExecutionSubmission) 
 		}
 	}
 
-	// 5. Run step
 	runCmd := lang.RunCmd
 	if sub.CommandLineArguments != "" {
 		runCmd += " " + sub.CommandLineArguments
@@ -201,7 +196,6 @@ func (d *DockerExecutor) Execute(ctx context.Context, sub *ExecutionSubmission) 
 }
 
 func (d *DockerExecutor) executeMultiFile(ctx context.Context, containerID string, sub *ExecutionSubmission) (*ExecutionResult, error) {
-	// Verify /box/run or /box/run.sh exists
 	checkRun, err := d.runCommand(ctx, containerID, "test -f /box/run || test -f /box/run.sh", 5, "")
 	if err != nil || checkRun.ExitCode != 0 {
 		return &ExecutionResult{
@@ -210,7 +204,6 @@ func (d *DockerExecutor) executeMultiFile(ctx context.Context, containerID strin
 		}, nil
 	}
 
-	// Optional compile script
 	checkCompile, _ := d.runCommand(ctx, containerID, "test -f /box/compile || test -f /box/compile.sh", 5, "")
 	if checkCompile != nil && checkCompile.ExitCode == 0 {
 		compRes, err := d.runCommand(ctx, containerID, "[ -f /box/compile ] && bash /box/compile || bash /box/compile.sh", 15, "")
@@ -230,7 +223,6 @@ func (d *DockerExecutor) executeMultiFile(ctx context.Context, containerID strin
 		}
 	}
 
-	// Run script
 	timeoutSecs := int(sub.WallTimeLimit)
 	if timeoutSecs <= 0 {
 		timeoutSecs = 10
@@ -262,14 +254,12 @@ func (d *DockerExecutor) copyAdditionalFiles(ctx context.Context, containerID st
 		return err
 	}
 
-	// Check path traversal inside container
 	check, err := d.runCommand(ctx, containerID, `unzip -l /box/_additional.zip | grep -E '\.\./|/\.\.' && echo TRAVERSAL || echo OK`, 10, "")
 	if err != nil || strings.Contains(check.Stdout, "TRAVERSAL") {
 		_, _ = d.runCommand(ctx, containerID, "rm -f /box/_additional.zip", 5, "")
 		return fmt.Errorf("ZIP archive contains dangerous path traversal entries")
 	}
 
-	// Extract
 	extract, err := d.runCommand(ctx, containerID, "unzip -n -qq /box/_additional.zip -d /box && rm -f /box/_additional.zip", 15, "")
 	if err != nil || extract.ExitCode != 0 {
 		return fmt.Errorf("failed to extract ZIP archive: %s", extract.Stderr)

@@ -31,7 +31,6 @@ func (e *ProcessExecutor) Type() string {
 }
 
 func (e *ProcessExecutor) Execute(ctx context.Context, sub *ExecutionSubmission) (*ExecutionResult, error) {
-	// 1. Create temporary sandbox workspace
 	boxID := uuid.New().String()[:8]
 	boxDir := filepath.Join(os.TempDir(), fmt.Sprintf("cee-box-%s", boxID))
 	if err := os.MkdirAll(boxDir, 0700); err != nil {
@@ -41,7 +40,6 @@ func (e *ProcessExecutor) Execute(ctx context.Context, sub *ExecutionSubmission)
 
 	lang := sub.Language
 
-	// 2. Handle Multi-File or Single-File Code Injection
 	if lang.ID == languages.LangMultiFile {
 		if sub.AdditionalFiles == "" {
 			return &ExecutionResult{
@@ -58,7 +56,6 @@ func (e *ProcessExecutor) Execute(ctx context.Context, sub *ExecutionSubmission)
 		return e.executeMultiFile(ctx, boxDir, sub)
 	}
 
-	// Single file program
 	if sub.SourceCode != "" && lang.SourceFile != "" {
 		sourcePath := filepath.Join(boxDir, lang.SourceFile)
 		if err := os.WriteFile(sourcePath, []byte(sub.SourceCode), 0600); err != nil {
@@ -66,14 +63,12 @@ func (e *ProcessExecutor) Execute(ctx context.Context, sub *ExecutionSubmission)
 		}
 	}
 
-	// Extract additional files if present
 	if sub.AdditionalFiles != "" {
 		if err := utils.ExtractZipFromBase64(sub.AdditionalFiles, boxDir); err != nil {
 			return nil, fmt.Errorf("failed to extract additional files: %w", err)
 		}
 	}
 
-	// 3. Compile if necessary
 	if lang.CompileCmd != "" {
 		compileCmdStr := lang.CompileCmd
 		if sub.CompilerOptions != "" {
@@ -114,7 +109,6 @@ func (e *ProcessExecutor) Execute(ctx context.Context, sub *ExecutionSubmission)
 		}
 	}
 
-	// 4. Run Execution
 	runCmdStr := lang.RunCmd
 	if sub.CommandLineArguments != "" {
 		runCmdStr += " " + sub.CommandLineArguments
@@ -167,7 +161,6 @@ func (e *ProcessExecutor) Execute(ctx context.Context, sub *ExecutionSubmission)
 }
 
 func (e *ProcessExecutor) executeMultiFile(ctx context.Context, boxDir string, sub *ExecutionSubmission) (*ExecutionResult, error) {
-	// Look for run or run.sh
 	runScript := ""
 	for _, name := range []string{"run", "run.sh"} {
 		if _, err := os.Stat(filepath.Join(boxDir, name)); err == nil {
@@ -183,7 +176,6 @@ func (e *ProcessExecutor) executeMultiFile(ctx context.Context, boxDir string, s
 		}, nil
 	}
 
-	// Optional compile script
 	for _, name := range []string{"compile", "compile.sh"} {
 		if _, err := os.Stat(filepath.Join(boxDir, name)); err == nil {
 			cCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -214,7 +206,6 @@ func (e *ProcessExecutor) executeMultiFile(ctx context.Context, boxDir string, s
 		}
 	}
 
-	// Execute run script
 	timeoutSecs := sub.WallTimeLimit
 	if timeoutSecs <= 0 {
 		timeoutSecs = 10.0

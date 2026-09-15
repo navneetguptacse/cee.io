@@ -1,0 +1,33 @@
+version: "3.8"
+
+services:
+  cee:
+    build:
+      context: .
+      dockerfile: docker/cee/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=development
+      - REDIS_URL=redis://redis:6379
+      - AUTH_TOKEN=dev-token
+      - EXECUTOR_TYPE=process
+      - WORKER_CONCURRENCY=4
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+volumes:
+  redis_data:

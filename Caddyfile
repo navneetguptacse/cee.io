@@ -1,0 +1,38 @@
+# Site address:
+#   DOMAIN unset -> ":80" -> plain HTTP on server IP
+#   DOMAIN=codebox.example.com -> Automatic HTTPS via Let's Encrypt
+{$SITE_ADDRESS::80} {
+    # Token-protected Prometheus metrics
+    @metrics {
+        path /metrics/*
+        header X-Metrics-Token {$METRICS_TOKEN:}
+    }
+    handle @metrics {
+        uri strip_prefix /metrics
+        reverse_proxy prometheus:9090
+    }
+    handle /metrics/* {
+        respond "Unauthorized" 401
+    }
+
+    # Reverse proxy to CEE Go API
+    reverse_proxy cee:3000
+
+    # Compression
+    encode gzip
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    # Structured JSON access logs
+    log {
+        output stdout
+        format json
+    }
+}
+

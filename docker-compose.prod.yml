@@ -1,0 +1,79 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - SITE_ADDRESS=${DOMAIN:-:80}
+      - METRICS_TOKEN=${METRICS_TOKEN:-metrics-secret-token}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - cee
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+  cee:
+    build:
+      context: .
+      dockerfile: docker/cee/Dockerfile
+    environment:
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis:6379
+      - AUTH_TOKEN=${AUTH_TOKEN:-cee-prod-token}
+      - PORT=3000
+      - EXECUTOR_TYPE=${EXECUTOR_TYPE:-process}
+      - WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-4}
+      - DEFAULT_MEMORY_LIMIT=256000
+      - MAX_MEMORY_LIMIT=512000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - redis
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "${WORKER_CPUS:-2.0}"
+          memory: ${WORKER_MEMORY:-2G}
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 384M
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 512M
+
+volumes:
+  redis_data:
+  prometheus_data:
+  caddy_data:
+  caddy_config:

@@ -79,21 +79,54 @@ Response:
 
 ---
 
-## Configuration & Environment Variables
+## Production Security & Authentication
 
-Configure CEE by passing environment variables with `-e`:
+In production environments exposed to the internet, you **must set `AUTH_TOKEN`** to prevent unauthorized users from executing code on your server.
+
+### 1. Generate a Cryptographically Secure Token
+
+Generate a 64-character token in your terminal:
+
+```bash
+AUTH_TOKEN=$(openssl rand -hex 32)
+echo "Token: $AUTH_TOKEN"
+```
+
+### 2. Run Container with Authentication
+
+Pass the generated token using `-e AUTH_TOKEN`:
 
 ```bash
 docker run -d -p 3000:3000 \
-  -e AUTH_TOKEN=your-secret-token \
+  -e AUTH_TOKEN="$AUTH_TOKEN" \
   -e MAX_WORKERS=8 \
   --name cee navneetguptacse/cee:latest
 ```
 
+### 3. Authenticate Client Requests
+
+When `AUTH_TOKEN` is configured, clients must include the `X-Auth-Token` HTTP header in every request:
+
+```bash
+curl -X POST "http://your-server-ip:3000/submissions?wait=true" \
+  -H "Content-Type: application/json" \
+  -H "X-Auth-Token: $AUTH_TOKEN" \
+  -d '{
+    "language_id": 71,
+    "source_code": "print(\"Authenticated!\")"
+  }'
+```
+
+If the header is missing or incorrect, CEE returns `HTTP 401 Unauthorized`.
+
+---
+
+## Configuration & Environment Variables
+
 | Variable         | Default   | Description                                                                        |
 | :--------------- | :-------- | :--------------------------------------------------------------------------------- |
 | `PORT`           | `3000`    | HTTP port to listen on                                                             |
-| `AUTH_TOKEN`     | _empty_   | Optional token. When set, clients must pass `X-Auth-Token`                         |
+| `AUTH_TOKEN`     | _empty_   | **Mandatory for production.** Token required via `X-Auth-Token` header             |
 | `MAX_WORKERS`    | `4`       | Number of concurrent execution workers                                             |
 | `EXECUTOR_TYPE`  | `process` | Sandbox engine: `process`, `docker`, or `isolate`                                  |
 | `REDIS_URL`      | _empty_   | Redis connection string (e.g. `redis://redis:6379`). Uses in-memory queue if empty |
@@ -101,9 +134,23 @@ docker run -d -p 3000:3000 \
 
 ---
 
-## Production Deployment with Docker Compose
+## Production Deployment with Docker Compose & Redis
 
-For high-throughput production clusters, run CEE with Redis:
+For high-throughput production clusters, create a `.env` file and launch CEE with Redis:
+
+```bash
+# 1. Create production environment configuration
+cat > .env <<EOF
+AUTH_TOKEN=$(openssl rand -hex 32)
+PORT=3000
+MAX_WORKERS=8
+EOF
+
+# 2. Start stack
+docker compose up -d
+```
+
+Example `docker-compose.yml`:
 
 ```yaml
 version: "3.8"
@@ -112,11 +159,11 @@ services:
   cee:
     image: navneetguptacse/cee:latest
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:3000"
     environment:
+      - AUTH_TOKEN=${AUTH_TOKEN}
       - REDIS_URL=redis://redis:6379
-      - MAX_WORKERS=8
-      - AUTH_TOKEN=your-secret-token
+      - MAX_WORKERS=${MAX_WORKERS:-8}
     depends_on:
       - redis
     restart: unless-stopped
@@ -124,12 +171,6 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-```
-
-Start the stack:
-
-```bash
-docker compose up -d
 ```
 
 ---

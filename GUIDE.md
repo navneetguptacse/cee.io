@@ -378,16 +378,21 @@ If you already have a server and want to run CEE as a background service:
 ./scripts/build.sh
 ```
 
-2. Run CEE with an authentication token:
+2. Generate a secure token and run CEE:
 
 ```bash
-AUTH_TOKEN=super-secret-token PORT=3000 ./bin/cee server &
+# Generate a random 64-character token
+AUTH_TOKEN=$(openssl rand -hex 32)
+echo "Your production token: $AUTH_TOKEN"
+
+# Run CEE with authentication enabled
+AUTH_TOKEN=$AUTH_TOKEN PORT=3000 ./bin/cee server &
 ```
 
 Now all requests must provide the header:
 
 ```bash
--H "X-Auth-Token: super-secret-token"
+-H "X-Auth-Token: <your-token>"
 ```
 
 ### Option B: Production Docker Compose (with Automatic SSL)

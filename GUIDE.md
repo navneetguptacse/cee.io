@@ -27,12 +27,10 @@ CEE can be used in three ways:
 
 ### First-Time Setup (30 Seconds)
 
-Clone the repository and build the binary:
 Clone the repository and build using `make`:
 
 ```bash
 cd cee.io
-./scripts/build.sh
 
 # Build the stripped static binary
 make build
@@ -40,11 +38,9 @@ make build
 
 This creates the executable file at `./bin/cee`.
 
-To make `cee` accessible from anywhere in your terminal:
 To install `cee` to your system path (`/usr/local/bin`):
 
 ```bash
-sudo cp ./bin/cee /usr/local/bin/cee
 sudo make install
 ```
 
@@ -71,9 +67,90 @@ sudo make install
 
 ## 2. Using CEE as a Local CLI Tool
 
-The `cee run` command automatically detects the programming language from the file extension, compiles if needed, runs the program in a sandbox, and reports execution time.
+The `cee run` command lets you execute code immediately on your machine without starting background servers or databases. It supports inline code strings, piped input from `stdin`, or direct file execution with automatic language detection.
 
-### Run Python
+### Running Inline Code Directly
+
+Execute code without creating a file using `-c` (or `--code`) and `-l` (or `--lang`):
+
+```bash
+# Python
+cee run -c "print(100 * 5)" -l py
+
+# JavaScript
+cee run -c "console.log(21 * 2)" -l js
+
+# Bash
+cee run -c "echo $((10 + 20))" -l bash
+```
+
+Output:
+
+```text
+Executing inline (Python (3.8.10)) with process...
+
+──────────────────── Execution Result ────────────────────
+Status:    Accepted (ID: 3)
+Exit Code: 0
+Wall Time: 0.071s (total CLI: 71ms)
+
+[Stdout]:
+500
+──────────────────────────────────────────────────────────
+```
+
+### Passing Inline Code Positionally
+
+If you provide a string that is not an existing file on disk alongside `-l`, `cee` treats it directly as source code:
+
+```bash
+cee run "print(25 * 4)" -l python
+```
+
+### Piping Code via Standard Input (`stdin`)
+
+You can pipe code directly from terminal pipelines:
+
+```bash
+echo "print('hello from stdin pipe')" | cee run -l py
+```
+
+### Supplying Input Data to Your Code (`--stdin`)
+
+If your inline program expects standard input, supply the input data via the `--stdin` flag:
+
+```bash
+cee run -c "name = input(); print(f'Hello, {name}!')" -l py --stdin "Alice"
+```
+
+Output:
+
+```text
+[Stdout]:
+Hello, Alice!
+```
+
+### Supported Language Aliases and IDs
+
+The `-l` / `--lang` flag accepts language names, common short aliases, or numeric Judge0 IDs:
+
+| Language   | Common Aliases                       | Canonical ID |
+| :--------- | :----------------------------------- | :----------- |
+| Python     | `py`, `python`, `python3`            | `71`         |
+| JavaScript | `js`, `javascript`, `node`, `nodejs` | `63`         |
+| TypeScript | `ts`, `typescript`                   | `74`         |
+| Go         | `go`, `golang`                       | `60`         |
+| C++        | `cpp`, `c++`, `g++`                  | `54`         |
+| C          | `c`, `gcc`                           | `50`         |
+| Java       | `java`, `openjdk`                    | `62`         |
+| Rust       | `rs`, `rust`                         | `73`         |
+| Bash       | `sh`, `bash`, `shell`                | `46`         |
+
+### Running from Local Files
+
+When passing a file path, `cee run` automatically detects the language from the file extension:
+
+#### Run Python
 
 Create a file named `hello.py`:
 
@@ -88,22 +165,7 @@ Run it:
 cee run hello.py --stdin "Alice"
 ```
 
-Output:
-
-```text
-Executing hello.py (Python (3.8.10)) with process...
-
-──────────────────── Execution Result ────────────────────
-Status:    Accepted (ID: 3)
-Exit Code: 0
-Wall Time: 0.045s (total CLI: 48ms)
-
-[Stdout]:
-Hello, Alice!
-──────────────────────────────────────────────────────────
-```
-
-### Run C++ with Automated Answer Checking
+#### Run C++ with Automated Answer Checking
 
 Create a file named `sum.cpp`:
 
@@ -130,7 +192,7 @@ cee run sum.cpp --stdin "15 25" --expected "40"
 cee run sum.cpp --stdin "15 25" --expected "50"
 ```
 
-### Run Go Code
+#### Run Go Code
 
 Create `main.go`:
 
@@ -151,12 +213,14 @@ cee run main.go
 
 ### Useful CLI Flags for `cee run`
 
-| Flag         | Description                                     | Example             |
-| :----------- | :---------------------------------------------- | :------------------ |
-| `--stdin`    | Feed input to stdin                             | `--stdin "100 200"` |
-| `--expected` | Compare stdout against expected string          | `--expected "300"`  |
-| `--timeout`  | Set execution timeout in seconds (default: 5.0) | `--timeout 2.0`     |
-| `--executor` | Choose sandbox engine (`process` or `docker`)   | `--executor docker` |
+| Flag         | Short | Description                                 | Example             |
+| :----------- | :---- | :------------------------------------------ | :------------------ |
+| `--code`     | `-c`  | Inline source code string to execute        | `-c "print(100)"`   |
+| `--lang`     | `-l`  | Language name, alias, or ID                 | `-l py`, `-l 71`    |
+| `--stdin`    |       | Feed input data to stdin of the program     | `--stdin "100 200"` |
+| `--expected` |       | Compare stdout against expected string      | `--expected "300"`  |
+| `--timeout`  | `-t`  | Execution timeout in seconds (default: 5.0) | `--timeout 2.0`     |
+| `--executor` | `-e`  | Sandbox engine (`process` or `docker`)      | `--executor docker` |
 
 ---
 

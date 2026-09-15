@@ -1,0 +1,28 @@
+# Git and documentation
+.git
+.gitignore
+*.md
+LICENSE
+
+# Binaries and local build outputs
+bin/
+dist/
+*.test
+*.out
+
+# Environment files and credentials
+.env*
+
+# Local IDE and OS metadata
+.DS_Store
+.idea/
+.vscode/
+
+# Temporary and log files
+tmp/
+.tmp/
+*.log
+*.zip
+caddy_data/
+caddy_config/
+

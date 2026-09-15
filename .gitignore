@@ -1,0 +1,55 @@
+# Binaries and compiled outputs
+bin/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go build & test cache
+vendor/
+
+# Test coverage and profiling
+coverage.txt
+coverage.out
+profile.out
+*.prof
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Temporary files and sandboxed execution workspaces
+tmp/
+.tmp/
+*.tmp
+*.zip
+
+# Caddy & Prometheus local runtime data
+caddy_data/
+caddy_config/
+
+# OS and Editor specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Log files
+*.log
+

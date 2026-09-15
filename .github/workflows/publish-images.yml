@@ -76,6 +76,16 @@ jobs:
           cache-from: type=gha,scope=cee
           cache-to: type=gha,mode=max,scope=cee
 
+      - name: Update Docker Hub Description
+        if: env.DOCKERHUB_TOKEN != ''
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
+          repository: ${{ env.DOCKERHUB_USERNAME }}/cee
+          readme-filepath: ./DOCKERHUB.md
+          short-description: "High-performance, Judge0-compatible code execution engine and CLI built in Go"
+
       - name: Summary
         run: |
           echo "### Pushed CEE Docker Image" >> $GITHUB_STEP_SUMMARY

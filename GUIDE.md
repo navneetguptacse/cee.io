@@ -406,7 +406,7 @@ The production configuration bundles CEE with **Caddy** (automatic HTTPS from Le
 cat > .env <<EOF
 AUTH_TOKEN=$(openssl rand -hex 32)
 METRICS_TOKEN=$(openssl rand -hex 16)
-DOMAIN=codebox.yourdomain.com
+DOMAIN=cee.yourdomain.com
 WORKER_CPUS=2.0
 WORKER_MEMORY=2G
 EOF
@@ -418,7 +418,7 @@ EOF
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-Caddy will automatically request and install an SSL certificate for `codebox.yourdomain.com`.
+Caddy will automatically request and install an SSL certificate for `cee.yourdomain.com`.
 
 ---
 

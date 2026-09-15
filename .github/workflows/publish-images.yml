@@ -76,8 +76,11 @@ jobs:
           cache-from: type=gha,scope=cee
           cache-to: type=gha,mode=max,scope=cee
 
-      - name: Update Docker Hub Description
+      # (Optional) Synchronize README to Docker Hub overview.
+      # Requires a Docker Hub PAT with 'Admin' permissions; if using Read & Write, set overview via web UI.
+      - name: Update Docker Hub Description (Optional)
         if: env.DOCKERHUB_TOKEN != ''
+        continue-on-error: true
         uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ env.DOCKERHUB_USERNAME }}

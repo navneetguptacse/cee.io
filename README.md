@@ -60,13 +60,13 @@ CEE (Code Execution Engine) is a self-hosted, drop-in replacement for Judge0 bui
 
 Pick the mode that matches your setup:
 
-| Mode                        | Prerequisites      | URL                           | TLS       | Build?           |
-| :-------------------------- | :----------------- | :---------------------------- | :-------- | :--------------- |
-| **1. CLI Only**             | Go installed       | Local terminal                | None      | `go build`       |
-| **2. Standalone Server**    | Go binary          | `http://localhost:3000`       | None      | `go build`       |
-| **3. Docker Compose (Dev)** | Docker Desktop     | `http://localhost:3000`       | None      | `docker compose` |
-| **4. Server (IP only)**     | Linux VPS + Docker | `http://<server-ip>`          | None      | `docker compose` |
-| **5. Server with Domain**   | VPS + DNS A record | `https://codebox.example.com` | Automatic | `docker compose` |
+| Mode                        | Prerequisites      | URL                     | TLS       | Build?           |
+| :-------------------------- | :----------------- | :---------------------- | :-------- | :--------------- |
+| **1. CLI Only**             | Go installed       | Local terminal          | None      | `go build`       |
+| **2. Standalone Server**    | Go binary          | `http://localhost:3000` | None      | `go build`       |
+| **3. Docker Compose (Dev)** | Docker Desktop     | `http://localhost:3000` | None      | `docker compose` |
+| **4. Server (IP only)**     | Linux VPS + Docker | `http://<server-ip>`    | None      | `docker compose` |
+| **5. Server with Domain**   | VPS + DNS A record | `https://cee.io`        | Automatic | `docker compose` |
 
 ---
 
@@ -188,7 +188,7 @@ curl -X POST "http://<server-ip>/submissions?wait=true" \
 
 Same stack as Mode 4, plus automatic SSL certification from Let's Encrypt managed by Caddy.
 
-1. Point an `A` record at your server IP (e.g. `codebox.example.com`).
+1. Point an `A` record at your server IP (e.g. `cee.io`).
 2. Ensure ports `80` and `443` are open.
 3. Set `DOMAIN` in `.env`:
 
@@ -198,7 +198,7 @@ cd /opt/cee
 cat > .env <<EOF
 AUTH_TOKEN=$(openssl rand -hex 32)
 METRICS_TOKEN=$(openssl rand -hex 16)
-DOMAIN=codebox.example.com
+DOMAIN=cee.io
 WORKER_CPUS=2.0
 WORKER_MEMORY=2G
 EOF
@@ -209,7 +209,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 Verify HTTPS access:
 
 ```bash
-curl https://codebox.example.com/health
+curl https://cee.io/health
 ```
 
 ---
@@ -242,13 +242,13 @@ cee run solution.cpp --stdin "10 20" --expected "30"
 **Submit to remote server:**
 
 ```bash
-cee submit solution.py --url https://codebox.example.com --token secret --wait
+cee submit solution.py --url https://cee.io --token secret --wait
 ```
 
 **Query submission status:**
 
 ```bash
-cee status c506ea63-d1b1-4c2f-8e84-7aaf5a89d98d --url https://codebox.example.com
+cee status c506ea63-d1b1-4c2f-8e84-7aaf5a89d98d --url https://cee.io
 ```
 
 ---

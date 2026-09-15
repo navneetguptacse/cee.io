@@ -1,6 +1,6 @@
 # Site address:
 #   DOMAIN unset -> ":80" -> plain HTTP on server IP
-#   DOMAIN=codebox.example.com -> Automatic HTTPS via Let's Encrypt
+#   DOMAIN=cee.io -> Automatic HTTPS via Let's Encrypt
 {$SITE_ADDRESS::80} {
     # Token-protected Prometheus metrics
     @metrics {

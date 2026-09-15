@@ -3,7 +3,7 @@ name: Publish Images
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ["v*"]
   workflow_dispatch:
 
 jobs:
@@ -44,6 +44,7 @@ jobs:
         with:
           images: |
             ghcr.io/${{ github.repository }}/cee
+            navneetguptacse/cee
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=tag

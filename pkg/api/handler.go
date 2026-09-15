@@ -50,8 +50,8 @@ func (h *Handler) About(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]any{
 		"version":     "1.0.0",
 		"engine":      "CEE (Code Execution Engine in Go)",
-		"homepage":    "https://cee.io",
-		"maintainer":  "CEE",
+		"homepage":    "https://github.com/navneetguptacse/cee",
+		"maintainer":  "Navneet Gupta <navneetguptacse@gmail.com>",
 		"compatible":  "Judge0 API v1.13.0",
 		"performance": "Ultra-low latency compiled Go runtime",
 	})

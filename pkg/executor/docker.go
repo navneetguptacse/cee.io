@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -103,6 +104,10 @@ func (d *DockerExecutor) Execute(ctx context.Context, sub *ExecutionSubmission) 
 
 	resp, err := d.cli.ContainerCreate(ctx, containerConfig, hostConfig, &network.NetworkingConfig{}, nil, "")
 	if err != nil {
+		if strings.Contains(err.Error(), "No such image") {
+			slog.Warn("docker_runner_image_missing_fallback_process", "image", sub.Language.Image, "error", err)
+			return NewProcessExecutor().Execute(ctx, sub)
+		}
 		return nil, fmt.Errorf("failed to create sandbox container: %w", err)
 	}
 	containerID := resp.ID

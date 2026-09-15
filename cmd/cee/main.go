@@ -63,16 +63,16 @@ func newServerCmd() *cobra.Command {
 		Short: "Start the CEE API server and execution workers",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg := config.Load()
-			if port > 0 {
+			if cmd.Flags().Changed("port") && port > 0 {
 				cfg.Server.Port = port
 			}
-			if redisURL != "" {
+			if cmd.Flags().Changed("redis") && redisURL != "" {
 				cfg.Redis.URL = redisURL
 			}
-			if concurrency > 0 {
+			if cmd.Flags().Changed("workers") && concurrency > 0 {
 				cfg.Worker.Concurrency = concurrency
 			}
-			if execType != "" {
+			if cmd.Flags().Changed("executor") && execType != "" {
 				cfg.Executor.Type = execType
 			}
 
@@ -163,13 +163,13 @@ func newWorkerCmd() *cobra.Command {
 		Short: "Start a standalone CEE queue worker",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg := config.Load()
-			if redisURL != "" {
+			if cmd.Flags().Changed("redis") && redisURL != "" {
 				cfg.Redis.URL = redisURL
 			}
-			if concurrency > 0 {
+			if cmd.Flags().Changed("workers") && concurrency > 0 {
 				cfg.Worker.Concurrency = concurrency
 			}
-			if execType != "" {
+			if cmd.Flags().Changed("executor") && execType != "" {
 				cfg.Executor.Type = execType
 			}
 

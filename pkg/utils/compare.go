@@ -8,4 +8,3 @@ func CompareOutput(actual, expected string) bool {
 	normExpected := strings.TrimRight(expected, " \t\r\n")
 	return normActual == normExpected
 }
-

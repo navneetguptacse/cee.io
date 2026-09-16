@@ -16,4 +16,3 @@ func extractExitCode(exitErr *exec.ExitError) int {
 	}
 	return exitErr.ExitCode()
 }
-

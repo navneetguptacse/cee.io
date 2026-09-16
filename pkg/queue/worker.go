@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"cee.io/pkg/languages"
 	"cee.io/pkg/metrics"
 	"cee.io/pkg/security"
+	"cee.io/pkg/utils"
 )
 
 type WorkerPool struct {
@@ -144,7 +144,7 @@ func (wp *WorkerPool) processJob(job *SubmissionJob) {
 		if job.Stdout != nil {
 			actual = *job.Stdout
 		}
-		if !compareOutput(actual, job.ExpectedOutput) {
+		if !utils.CompareOutput(actual, job.ExpectedOutput) {
 			job.Status = languages.GetStatusByID(languages.StatusWrongAnswer)
 		}
 	}
@@ -203,10 +203,4 @@ func (wp *WorkerPool) sendCallback(job *SubmissionJob) {
 	defer resp.Body.Close()
 
 	slog.Info("callback_sent", "token", job.Token, "url", job.CallbackURL, "http_status", resp.StatusCode)
-}
-
-func compareOutput(actual, expected string) bool {
-	normActual := strings.TrimRight(actual, " \t\r\n")
-	normExpected := strings.TrimRight(expected, " \t\r\n")
-	return normActual == normExpected
 }

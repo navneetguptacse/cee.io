@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"cee.io/pkg/languages"
+	"cee.io/pkg/utils"
 )
 
 const MaxOutputLength = 65536 // 64KB truncate limit
@@ -16,13 +17,31 @@ func NewResultParser() *ResultParser {
 
 // Parse processes raw execution telemetry into a Judge0-compliant ExecutionResult.
 func (p *ResultParser) Parse(raw *RawExecution, sub *ExecutionSubmission) *ExecutionResult {
+	stdout := p.truncate(raw.Stdout)
+	stderr := p.truncate(raw.Stderr)
+
+	if sub.RedirectStderrToStdout {
+		if stderr != "" {
+			if stdout != "" {
+				stdout += "\n" + stderr
+			} else {
+				stdout = stderr
+			}
+			stderr = ""
+		}
+	}
+
 	var status languages.Status
 	var exitSignal *int
 
 	if raw.TimedOut {
 		status = languages.GetStatusByID(languages.StatusTimeLimitExceeded)
 	} else if raw.ExitCode == 0 {
-		status = languages.GetStatusByID(languages.StatusAccepted)
+		if sub.ExpectedOutput != "" && !utils.CompareOutput(stdout, sub.ExpectedOutput) {
+			status = languages.GetStatusByID(languages.StatusWrongAnswer)
+		} else {
+			status = languages.GetStatusByID(languages.StatusAccepted)
+		}
 	} else {
 		switch raw.ExitCode {
 		case 137, 9:
@@ -51,20 +70,6 @@ func (p *ResultParser) Parse(raw *RawExecution, sub *ExecutionSubmission) *Execu
 				sig := raw.ExitCode - 128
 				exitSignal = &sig
 			}
-		}
-	}
-
-	stdout := p.truncate(raw.Stdout)
-	stderr := p.truncate(raw.Stderr)
-
-	if sub.RedirectStderrToStdout {
-		if stderr != "" {
-			if stdout != "" {
-				stdout += "\n" + stderr
-			} else {
-				stdout = stderr
-			}
-			stderr = ""
 		}
 	}
 

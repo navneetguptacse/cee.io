@@ -327,6 +327,13 @@ func newRunCmd() *cobra.Command {
 				}
 			}
 
+			if expectedOutput != "" && res.Status.ID == languages.StatusWrongAnswer {
+				fmt.Printf("\n[Expected Output]:\n%s", expectedOutput)
+				if !strings.HasSuffix(expectedOutput, "\n") {
+					fmt.Println()
+				}
+			}
+
 			if res.Stderr != nil && *res.Stderr != "" {
 				fmt.Printf("\n[Stderr]:\n%s", *res.Stderr)
 				if !strings.HasSuffix(*res.Stderr, "\n") {

@@ -139,7 +139,7 @@ func (e *ProcessExecutor) Execute(ctx context.Context, sub *ExecutionSubmission)
 	exitCode := 0
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
+			exitCode = extractExitCode(exitErr)
 		} else if timedOut {
 			exitCode = 124
 		} else {
@@ -231,7 +231,7 @@ func (e *ProcessExecutor) executeMultiFile(ctx context.Context, boxDir string, s
 	exitCode := 0
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
+			exitCode = extractExitCode(exitErr)
 		} else if timedOut {
 			exitCode = 124
 		} else {

@@ -380,3 +380,110 @@ func TestAuth_LockoutProtection_LastMasterKey(t *testing.T) {
 		t.Fatalf("revoking remaining last master must fail with 409 Conflict, got %d", recRevokeLastAgain.Code)
 	}
 }
+
+func TestAuth_API_RoleValidationAndNonLeakage(t *testing.T) {
+	masterToken := "master-token"
+	handler, _, cleanup := setupAuthTestServer(t, masterToken, "")
+	defer cleanup()
+
+	// 1. Generate a guest key
+	genGuestPayload, _ := json.Marshal(auth.GenerateKeyRequest{
+		Type: auth.TypeAuth,
+		Role: auth.RoleGuest,
+	})
+	reqGen := httptest.NewRequest(http.MethodPost, "/api/keys", bytes.NewReader(genGuestPayload))
+	reqGen.Header.Set("X-Auth-Token", masterToken)
+	recGen := httptest.NewRecorder()
+	handler.ServeHTTP(recGen, reqGen)
+	if recGen.Code != http.StatusCreated {
+		t.Fatalf("failed generating guest key: %d", recGen.Code)
+	}
+	var guestResp auth.GenerateKeyResponse
+	_ = json.Unmarshal(recGen.Body.Bytes(), &guestResp)
+	guestToken := guestResp.APIKey
+
+	// 2. Query capabilities with expected role:
+	// A) Master key checking for role=guest -> MUST fail with 403 and NOT leak that it is a master key
+	reqCapMismatch1 := httptest.NewRequest(http.MethodGet, "/api/capabilities?role=guest", nil)
+	reqCapMismatch1.Header.Set("X-Auth-Token", masterToken)
+	recCapMismatch1 := httptest.NewRecorder()
+	handler.ServeHTTP(recCapMismatch1, reqCapMismatch1)
+	if recCapMismatch1.Code != http.StatusForbidden {
+		t.Fatalf("master key with role=guest must be forbidden: expected 403, got %d", recCapMismatch1.Code)
+	}
+	if strings.Contains(recCapMismatch1.Body.String(), "MASTER") {
+		t.Fatalf("error message must NOT leak key owner (MASTER): %s", recCapMismatch1.Body.String())
+	}
+	if !strings.Contains(recCapMismatch1.Body.String(), "Invalid or unauthorized API key") {
+		t.Fatalf("expected 'Invalid or unauthorized API key', got: %s", recCapMismatch1.Body.String())
+	}
+
+	// B) Guest key checking for role=master -> MUST fail with 403 and NOT leak that it is a guest key
+	reqCapMismatch2 := httptest.NewRequest(http.MethodGet, "/api/capabilities?role=master", nil)
+	reqCapMismatch2.Header.Set("X-Auth-Token", guestToken)
+	recCapMismatch2 := httptest.NewRecorder()
+	handler.ServeHTTP(recCapMismatch2, reqCapMismatch2)
+	if recCapMismatch2.Code != http.StatusForbidden {
+		t.Fatalf("guest key with role=master must be forbidden: expected 403, got %d", recCapMismatch2.Code)
+	}
+	if strings.Contains(recCapMismatch2.Body.String(), "GUEST") {
+		t.Fatalf("error message must NOT leak key owner (GUEST): %s", recCapMismatch2.Body.String())
+	}
+	if !strings.Contains(recCapMismatch2.Body.String(), "Invalid or unauthorized API key") {
+		t.Fatalf("expected 'Invalid or unauthorized API key', got: %s", recCapMismatch2.Body.String())
+	}
+
+	// 3. Test POST /api/auth/login API endpoint:
+	// A) Guest key logging in as guest -> success
+	loginGuestPayload, _ := json.Marshal(map[string]string{"role": "guest"})
+	reqLoginGuest := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(loginGuestPayload))
+	reqLoginGuest.Header.Set("X-Auth-Token", guestToken)
+	recLoginGuest := httptest.NewRecorder()
+	handler.ServeHTTP(recLoginGuest, reqLoginGuest)
+	if recLoginGuest.Code != http.StatusOK {
+		t.Fatalf("guest login: expected 200, got %d: %s", recLoginGuest.Code, recLoginGuest.Body.String())
+	}
+	if !strings.Contains(recLoginGuest.Body.String(), "Successfully logged in!") {
+		t.Fatalf("expected 'Successfully logged in!' in response: %s", recLoginGuest.Body.String())
+	}
+
+	// B) Master key logging in as guest -> MUST return 403 Forbidden without leaking role
+	reqLoginMismatch := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(loginGuestPayload))
+	reqLoginMismatch.Header.Set("X-Auth-Token", masterToken)
+	recLoginMismatch := httptest.NewRecorder()
+	handler.ServeHTTP(recLoginMismatch, reqLoginMismatch)
+	if recLoginMismatch.Code != http.StatusForbidden {
+		t.Fatalf("master key logging in as guest must be 403: got %d", recLoginMismatch.Code)
+	}
+	if strings.Contains(recLoginMismatch.Body.String(), "MASTER") {
+		t.Fatalf("error response must NOT leak MASTER: %s", recLoginMismatch.Body.String())
+	}
+	if !strings.Contains(recLoginMismatch.Body.String(), "Invalid or unauthorized API key") {
+		t.Fatalf("expected 'Invalid or unauthorized API key', got: %s", recLoginMismatch.Body.String())
+	}
+
+	// C) Master key logging in as master -> success
+	loginMasterPayload, _ := json.Marshal(map[string]string{"role": "master"})
+	reqLoginMaster := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(loginMasterPayload))
+	reqLoginMaster.Header.Set("X-Auth-Token", masterToken)
+	recLoginMaster := httptest.NewRecorder()
+	handler.ServeHTTP(recLoginMaster, reqLoginMaster)
+	if recLoginMaster.Code != http.StatusOK {
+		t.Fatalf("master login: expected 200, got %d: %s", recLoginMaster.Code, recLoginMaster.Body.String())
+	}
+	if !strings.Contains(recLoginMaster.Body.String(), "Successfully logged in!") {
+		t.Fatalf("expected 'Successfully logged in!' in response: %s", recLoginMaster.Body.String())
+	}
+
+	// 4. Test POST /api/auth/logout API endpoint:
+	reqLogout := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+	reqLogout.Header.Set("X-Auth-Token", masterToken)
+	recLogout := httptest.NewRecorder()
+	handler.ServeHTTP(recLogout, reqLogout)
+	if recLogout.Code != http.StatusOK {
+		t.Fatalf("logout: expected 200, got %d: %s", recLogout.Code, recLogout.Body.String())
+	}
+	if !strings.Contains(recLogout.Body.String(), "Successfully logged out!") {
+		t.Fatalf("expected 'Successfully logged out!' in response: %s", recLogout.Body.String())
+	}
+}

@@ -44,6 +44,11 @@ func NewRouter(cfg *config.Config, q queue.Queue, exec executor.Executor, keySto
 		// Capabilities / Whoami (accessible by any valid active credential)
 		pr.Get("/api/capabilities", h.GetCapabilities)
 
+		// Auth validation / login / logout endpoints
+		pr.Post("/api/auth/login", h.Login)
+		pr.Post("/api/auth/verify", h.Login)
+		pr.Post("/api/auth/logout", h.Logout)
+
 		// API Key Management routes
 		pr.Route("/api/keys", func(kr chi.Router) {
 			kr.Post("/", h.GenerateKey) // Generates key: Master can create any; Guest can create Guest

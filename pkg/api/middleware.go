@@ -150,7 +150,7 @@ func AuthMiddleware(cfg *config.Config, store auth.Store) func(http.Handler) htt
 					w.WriteHeader(http.StatusUnauthorized)
 					_ = json.NewEncoder(w).Encode(ErrorResponse{
 						Error:   "Authentication failed",
-						Message: "Invalid or revoked authentication token",
+						Message: "Invalid or unauthorized API key",
 					})
 					return
 				}
@@ -179,7 +179,7 @@ func AuthMiddleware(cfg *config.Config, store auth.Store) func(http.Handler) htt
 				w.WriteHeader(http.StatusUnauthorized)
 				_ = json.NewEncoder(w).Encode(ErrorResponse{
 					Error:   "Authentication failed",
-					Message: "Invalid authentication token",
+					Message: "Invalid or unauthorized API key",
 				})
 				return
 			}
@@ -202,7 +202,7 @@ func RequireNormalAPI(next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusForbidden)
 			_ = json.NewEncoder(w).Encode(ErrorResponse{
 				Error:   "Forbidden",
-				Message: "Your credential is not authorized to access application APIs",
+				Message: "Invalid or unauthorized API key",
 			})
 			return
 		}
@@ -219,7 +219,7 @@ func RequireMasterAuth(next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusForbidden)
 			_ = json.NewEncoder(w).Encode(ErrorResponse{
 				Error:   "Forbidden",
-				Message: "Master AUTH API key required for this operation",
+				Message: "Invalid or unauthorized API key",
 			})
 			return
 		}
@@ -250,7 +250,7 @@ func RequireMetrics(cfg *config.Config, store auth.Store) func(http.Handler) htt
 					w.WriteHeader(http.StatusUnauthorized)
 					_ = json.NewEncoder(w).Encode(ErrorResponse{
 						Error:   "Authentication failed",
-						Message: "Invalid or revoked metrics credential",
+						Message: "Invalid or unauthorized API key",
 					})
 					return
 				}
@@ -260,7 +260,7 @@ func RequireMetrics(cfg *config.Config, store auth.Store) func(http.Handler) htt
 					w.WriteHeader(http.StatusForbidden)
 					_ = json.NewEncoder(w).Encode(ErrorResponse{
 						Error:   "Forbidden",
-						Message: "Guest credentials are not authorized to access metrics",
+						Message: "Invalid or unauthorized API key",
 					})
 					return
 				}

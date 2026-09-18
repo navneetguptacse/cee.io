@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net"
@@ -10,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"cee.io/pkg/auth"
 	"cee.io/pkg/config"
 )
 
@@ -76,21 +78,58 @@ func CORS(next http.Handler) http.Handler {
 	})
 }
 
-// AuthMiddleware validates authentication tokens against configured tokens.
-func AuthMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
+type contextKey string
+
+const (
+	KeyContextKey contextKey = "cee_auth_key"
+)
+
+// GetKeyFromContext retrieves the authenticated Key from the request context.
+func GetKeyFromContext(ctx context.Context) *auth.Key {
+	if val := ctx.Value(KeyContextKey); val != nil {
+		if k, ok := val.(*auth.Key); ok {
+			return k
+		}
+	}
+	return nil
+}
+
+func extractToken(r *http.Request, customHeaders []string) string {
+	// 1. Authorization: Bearer <token>
+	if authHeader := r.Header.Get("Authorization"); authHeader != "" {
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+			return strings.TrimSpace(parts[1])
+		}
+		return strings.TrimSpace(authHeader)
+	}
+
+	// 2. Standard token headers
+	for _, h := range []string{"X-Auth-Token", "x-rapidapi-key", "X-Metrics-Token"} {
+		if val := r.Header.Get(h); val != "" {
+			return strings.TrimSpace(val)
+		}
+	}
+
+	// 3. Custom configured headers
+	for _, h := range customHeaders {
+		if val := r.Header.Get(h); val != "" {
+			return strings.TrimSpace(val)
+		}
+	}
+
+	return ""
+}
+
+// AuthMiddleware validates authentication tokens against the auth.Store or configured tokens.
+func AuthMiddleware(cfg *config.Config, store auth.Store) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if len(cfg.Auth.Tokens) == 0 {
+			clientToken := extractToken(r, cfg.Auth.Headers)
+
+			if len(cfg.Auth.Tokens) == 0 && clientToken == "" {
 				next.ServeHTTP(w, r)
 				return
-			}
-
-			var clientToken string
-			for _, header := range cfg.Auth.Headers {
-				if val := r.Header.Get(header); val != "" {
-					clientToken = val
-					break
-				}
 			}
 
 			if clientToken == "" {
@@ -103,6 +142,30 @@ func AuthMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 				return
 			}
 
+			if store != nil {
+				hash := auth.HashKey(clientToken)
+				k, err := store.GetKeyByHash(r.Context(), hash)
+				if err != nil || k.Status != auth.StatusActive {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusUnauthorized)
+					_ = json.NewEncoder(w).Encode(ErrorResponse{
+						Error:   "Authentication failed",
+						Message: "Invalid or revoked authentication token",
+					})
+					return
+				}
+
+				// Record last used asynchronously
+				go func(id string) {
+					_ = store.TouchKey(context.Background(), id)
+				}(k.ID)
+
+				ctx := context.WithValue(r.Context(), KeyContextKey, k)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			// Fallback legacy authentication check if store is nil
 			authorized := false
 			for _, token := range cfg.Auth.Tokens {
 				if token == clientToken {
@@ -118,6 +181,92 @@ func AuthMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 					Error:   "Authentication failed",
 					Message: "Invalid authentication token",
 				})
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// RequireNormalAPI ensures the caller has permission to access normal application APIs.
+func RequireNormalAPI(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		k := GetKeyFromContext(r.Context())
+		if k == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if !auth.HasPermission(k, auth.PermAPIAccess) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(ErrorResponse{
+				Error:   "Forbidden",
+				Message: "Your credential is not authorized to access application APIs",
+			})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// RequireMasterAuth ensures only Master AUTH credentials can access the route.
+func RequireMasterAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		k := GetKeyFromContext(r.Context())
+		if k == nil || k.Type != auth.TypeAuth || k.Role != auth.RoleMaster {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(ErrorResponse{
+				Error:   "Forbidden",
+				Message: "Master AUTH API key required for this operation",
+			})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// RequireMetrics protects metrics endpoints allowing only Auth Master and Metrics Master.
+func RequireMetrics(cfg *config.Config, store auth.Store) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			clientToken := extractToken(r, cfg.Auth.Headers)
+			if clientToken == "" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(ErrorResponse{
+					Error:   "Authentication required",
+					Message: "Metrics endpoint requires authentication",
+				})
+				return
+			}
+
+			if store != nil {
+				hash := auth.HashKey(clientToken)
+				k, err := store.GetKeyByHash(r.Context(), hash)
+				if err != nil || k.Status != auth.StatusActive {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusUnauthorized)
+					_ = json.NewEncoder(w).Encode(ErrorResponse{
+						Error:   "Authentication failed",
+						Message: "Invalid or revoked metrics credential",
+					})
+					return
+				}
+
+				if !auth.HasPermission(k, auth.PermMetricsAccess) {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusForbidden)
+					_ = json.NewEncoder(w).Encode(ErrorResponse{
+						Error:   "Forbidden",
+						Message: "Guest credentials are not authorized to access metrics",
+					})
+					return
+				}
+
+				ctx := context.WithValue(r.Context(), KeyContextKey, k)
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 

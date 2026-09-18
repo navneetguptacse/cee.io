@@ -28,6 +28,7 @@ services:
       - NODE_ENV=production
       - REDIS_URL=redis://redis:6379
       - AUTH_TOKEN=${AUTH_TOKEN:-cee-prod-token}
+      - METRICS_TOKEN=${METRICS_TOKEN:-metrics-secret-token}
       - PORT=3000
       - EXECUTOR_TYPE=${EXECUTOR_TYPE:-process}
       - WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-4}

@@ -5,7 +5,15 @@
         path /metrics /metrics/*
         header X-Metrics-Token {$METRICS_TOKEN:}
     }
+    @metrics_auth {
+        path /metrics /metrics/*
+        header X-Auth-Token {$METRICS_TOKEN:}
+    }
     handle @metrics {
+        uri strip_prefix /metrics
+        reverse_proxy prometheus:9090
+    }
+    handle @metrics_auth {
         uri strip_prefix /metrics
         reverse_proxy prometheus:9090
     }

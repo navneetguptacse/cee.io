@@ -18,6 +18,7 @@ import (
 // Store defines persistence operations for API keys.
 type Store interface {
 	CreateKey(ctx context.Context, key *Key) error
+	UpsertKey(ctx context.Context, key *Key) error
 	GetKey(ctx context.Context, id string) (*Key, error)
 	GetKeyByHash(ctx context.Context, hash string) (*Key, error)
 	ListKeys(ctx context.Context) ([]*Key, error)
@@ -27,10 +28,7 @@ type Store interface {
 	Close() error
 }
 
-// -----------------------------------------------------------------------------
 // MemoryStore: In-memory thread-safe implementation
-// -----------------------------------------------------------------------------
-
 type MemoryStore struct {
 	mu         sync.RWMutex
 	keysByID   map[string]*Key
@@ -53,6 +51,21 @@ func (s *MemoryStore) CreateKey(ctx context.Context, key *Key) error {
 	}
 	if _, exists := s.keysByHash[key.KeyHash]; exists {
 		return fmt.Errorf("duplicate key hash")
+	}
+
+	clone := *key
+	s.keysByID[key.ID] = &clone
+	s.keysByHash[key.KeyHash] = &clone
+	return nil
+}
+
+func (s *MemoryStore) UpsertKey(ctx context.Context, key *Key) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// If old key with same ID exists, remove its old hash mapping
+	if old, exists := s.keysByID[key.ID]; exists {
+		delete(s.keysByHash, old.KeyHash)
 	}
 
 	clone := *key
@@ -156,10 +169,7 @@ func (s *MemoryStore) Close() error {
 	return nil
 }
 
-// -----------------------------------------------------------------------------
 // RedisStore: Redis-backed persistence with in-memory sync
-// -----------------------------------------------------------------------------
-
 const (
 	RedisKeyMetaPrefix = "cee:keys:meta:"
 	RedisKeyHashPrefix = "cee:keys:hash:"
@@ -234,6 +244,28 @@ func (s *RedisStore) CreateKey(ctx context.Context, key *Key) error {
 	return s.memory.CreateKey(ctx, key)
 }
 
+func (s *RedisStore) UpsertKey(ctx context.Context, key *Key) error {
+	// If old key exists with different hash, remove old hash in Redis
+	if oldKey, err := s.memory.GetKey(ctx, key.ID); err == nil && oldKey != nil && oldKey.KeyHash != key.KeyHash {
+		_ = s.rdb.Del(ctx, RedisKeyHashPrefix+oldKey.KeyHash).Err()
+	}
+
+	data, err := json.Marshal(key)
+	if err != nil {
+		return err
+	}
+
+	pipe := s.rdb.Pipeline()
+	pipe.Set(ctx, RedisKeyMetaPrefix+key.ID, data, 0)
+	pipe.Set(ctx, RedisKeyHashPrefix+key.KeyHash, key.ID, 0)
+	pipe.SAdd(ctx, RedisKeyAllSet, key.ID)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("redis pipe error: %w", err)
+	}
+
+	return s.memory.UpsertKey(ctx, key)
+}
+
 func (s *RedisStore) GetKey(ctx context.Context, id string) (*Key, error) {
 	return s.memory.GetKey(ctx, id)
 }
@@ -278,10 +310,7 @@ func (s *RedisStore) Close() error {
 	return s.rdb.Close()
 }
 
-// -----------------------------------------------------------------------------
 // Factory & Bootstrap
-// -----------------------------------------------------------------------------
-
 // Bootstrap registers initial master credentials from .env and config.
 func Bootstrap(ctx context.Context, store Store, authTokens []string, metricsToken string) error {
 	// 1. Ingest Master AUTH credentials
@@ -292,8 +321,9 @@ func Bootstrap(ctx context.Context, store Store, authTokens []string, metricsTok
 		}
 
 		hash := HashKey(token)
-		if _, err := store.GetKeyByHash(ctx, hash); errors.Is(err, ErrKeyNotFound) {
-			id := fmt.Sprintf("key_bootstrap_auth_%d", i+1)
+		id := fmt.Sprintf("key_bootstrap_auth_%d", i+1)
+		existingKey, err := store.GetKey(ctx, id)
+		if errors.Is(err, ErrKeyNotFound) || existingKey == nil || existingKey.KeyHash != hash {
 			k := &Key{
 				ID:          id,
 				Prefix:      ExtractPrefix(token),
@@ -305,7 +335,7 @@ func Bootstrap(ctx context.Context, store Store, authTokens []string, metricsTok
 				CreatedBy:   "system_bootstrap",
 				Description: "Default Master AUTH API key from configuration",
 			}
-			if err := store.CreateKey(ctx, k); err != nil {
+			if err := store.UpsertKey(ctx, k); err != nil {
 				slog.Error("failed_registering_bootstrap_auth_key", "error", err)
 			} else {
 				slog.Info("registered_bootstrap_auth_key", "id", id, "prefix", k.Prefix)
@@ -317,8 +347,9 @@ func Bootstrap(ctx context.Context, store Store, authTokens []string, metricsTok
 	metricsToken = strings.TrimSpace(metricsToken)
 	if metricsToken != "" {
 		hash := HashKey(metricsToken)
-		if _, err := store.GetKeyByHash(ctx, hash); errors.Is(err, ErrKeyNotFound) {
-			id := "key_bootstrap_metrics"
+		id := "key_bootstrap_metrics"
+		existingKey, err := store.GetKey(ctx, id)
+		if errors.Is(err, ErrKeyNotFound) || existingKey == nil || existingKey.KeyHash != hash {
 			k := &Key{
 				ID:          id,
 				Prefix:      ExtractPrefix(metricsToken),
@@ -330,7 +361,7 @@ func Bootstrap(ctx context.Context, store Store, authTokens []string, metricsTok
 				CreatedBy:   "system_bootstrap",
 				Description: "Default Master METRICS API key from configuration",
 			}
-			if err := store.CreateKey(ctx, k); err != nil {
+			if err := store.UpsertKey(ctx, k); err != nil {
 				slog.Error("failed_registering_bootstrap_metrics_key", "error", err)
 			} else {
 				slog.Info("registered_bootstrap_metrics_key", "id", id, "prefix", k.Prefix)

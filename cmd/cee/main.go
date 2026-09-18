@@ -1047,11 +1047,16 @@ func newAuthCmd() *cobra.Command {
 			if targetURL == "" {
 				targetURL = cfg.APIURL
 			}
+			if targetURL == "" {
+				targetURL = "http://localhost:3000"
+			}
 			targetURL = strings.TrimRight(targetURL, "/")
 
 			// Test metrics access against the server
 			req, _ := http.NewRequest(http.MethodGet, targetURL+"/metrics", nil)
+			req.Header.Set("X-Metrics-Token", key)
 			req.Header.Set("X-Auth-Token", key)
+			req.Header.Set("Authorization", "Bearer "+key)
 			client := &http.Client{Timeout: 5 * time.Second}
 			resp, err := client.Do(req)
 			if err == nil {
@@ -1059,10 +1064,13 @@ func newAuthCmd() *cobra.Command {
 				if resp.StatusCode == http.StatusOK {
 					fmt.Println("✓ Verified METRICS API key with server.")
 				} else if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
-					return fmt.Errorf("server rejected METRICS key (HTTP %d): Invalid or unauthorized metrics token", resp.StatusCode)
+					return fmt.Errorf("server rejected METRICS key (HTTP %d): Invalid or unauthorized metrics token\n(Ensure METRICS_TOKEN matches the server configuration and containers have been restarted)", resp.StatusCode)
 				}
 			}
 
+			if metricsUrlFlag != "" {
+				cfg.APIURL = targetURL
+			}
 			cfg.MetricsToken = key
 			if err := saveClientConfig(cfg); err != nil {
 				return err
@@ -1160,6 +1168,21 @@ func executeLogin(expectedRole, key, metricsKey, urlFlag string) error {
 		if actualRole == "guest" {
 			return fmt.Errorf("invalid option: METRICS API keys cannot be configured for Guest credentials (Master only)")
 		}
+
+		// Verify metrics key against server if reachable
+		reqM, _ := http.NewRequest(http.MethodGet, targetURL+"/metrics", nil)
+		reqM.Header.Set("X-Metrics-Token", metricsKey)
+		reqM.Header.Set("X-Auth-Token", metricsKey)
+		reqM.Header.Set("Authorization", "Bearer "+metricsKey)
+		if respM, errM := client.Do(reqM); errM == nil {
+			defer respM.Body.Close()
+			if respM.StatusCode == http.StatusOK {
+				fmt.Println("✓ Verified METRICS API key with server.")
+			} else if respM.StatusCode == http.StatusForbidden || respM.StatusCode == http.StatusUnauthorized {
+				return fmt.Errorf("server rejected METRICS key (HTTP %d): Invalid or unauthorized metrics token\n(Ensure METRICS_TOKEN matches the server configuration and containers have been restarted)", respM.StatusCode)
+			}
+		}
+
 		cfg.MetricsToken = metricsKey
 	} else if actualRole == "guest" {
 		cfg.MetricsToken = "" // Clear any existing metrics token when logging in as guest
@@ -1184,6 +1207,13 @@ func executeLogin(expectedRole, key, metricsKey, urlFlag string) error {
 		}
 		fmt.Printf("API Key:         %s\n", masked)
 		fmt.Println("Server Status:   Saved locally (server was unreachable)")
+	}
+	if cfg.MetricsToken != "" {
+		maskedM := cfg.MetricsToken
+		if len(maskedM) > 12 {
+			maskedM = maskedM[:6] + "..." + maskedM[len(maskedM)-4:]
+		}
+		fmt.Printf("Metrics Key:     %s (configured)\n", maskedM)
 	}
 	fmt.Println("──────────────────────────────────────────────────────────")
 	fmt.Println("Role Permissions:")

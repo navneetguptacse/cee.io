@@ -55,6 +55,7 @@ func init() {
 	rootCmd.AddCommand(newConfigCmd())
 	rootCmd.AddCommand(newTokenCmd())
 	rootCmd.AddCommand(newAuthCmd())
+	rootCmd.AddCommand(newLogoutCmd())
 }
 
 func newServerCmd() *cobra.Command {
@@ -1096,15 +1097,7 @@ func newAuthCmd() *cobra.Command {
 		Use:   "logout",
 		Short: "Clear active authentication credentials from local config",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg := loadClientConfig()
-			cfg.AuthToken = ""
-			cfg.MetricsToken = ""
-			cfg.Role = ""
-			if err := saveClientConfig(cfg); err != nil {
-				return err
-			}
-			fmt.Println("Successfully logged out. Local credentials cleared.")
-			return nil
+			return executeLogout()
 		},
 	}
 
@@ -1115,6 +1108,28 @@ func newAuthCmd() *cobra.Command {
 	cmd.AddCommand(logoutCmd)
 
 	return cmd
+}
+
+func newLogoutCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "logout",
+		Short: "Log out and clear active authentication credentials (alias for 'cee auth logout')",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return executeLogout()
+		},
+	}
+}
+
+func executeLogout() error {
+	cfg := loadClientConfig()
+	cfg.AuthToken = ""
+	cfg.MetricsToken = ""
+	cfg.Role = ""
+	if err := saveClientConfig(cfg); err != nil {
+		return err
+	}
+	fmt.Println("Successfully logged out. Local credentials cleared.")
+	return nil
 }
 
 func executeLogin(expectedRole, key, metricsKey, urlFlag string) error {

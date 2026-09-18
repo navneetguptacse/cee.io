@@ -73,17 +73,28 @@ Pick the mode that matches your setup:
 ### Mode 1 — Using the `cee` CLI
 
 #### Install via Homebrew (macOS & Linux):
+
 ```bash
 brew tap navneetguptacse/cee https://github.com/navneetguptacse/cee.io
 brew install navneetguptacse/cee/cee
 ```
 
 #### Install via One-Liner Script:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/navneetguptacse/cee.io/main/install.sh | bash
 ```
 
+#### Install via NPM:
+
+```bash
+npm install -g github:navneetguptacse/cee.io
+# Or if published to npm registry:
+npm install -g cee-cli
+```
+
 #### Or Install from Source:
+
 ```bash
 cd cee.io
 make build
@@ -91,27 +102,35 @@ sudo make install
 ```
 
 # Run inline code directly
-./bin/cee run -c "print(100 * 5)" -l py
-./bin/cee run "console.log(21 * 2)" -l js
+
+./bin/cee run -c "print(100 _ 5)" -l py
+./bin/cee run "console.log(21 _ 2)" -l js
 
 # Pipe code via stdin
+
 echo "print('hello from stdin')" | ./bin/cee run -l py
 
 # Run Python code directly
+
 ./bin/cee run script.py --stdin "Hello World"
 
 # Run C++ code with automatic compilation
+
 ./bin/cee run solution.cpp --stdin "10 20" --expected "30"
 
 # Run Go code
+
 ./bin/cee run main.go
 
 # List all supported language IDs and compilers
+
 ./bin/cee languages
 
 # Run self-diagnostic suite
+
 ./bin/cee test
-```
+
+````
 
 ---
 
@@ -132,7 +151,7 @@ curl http://localhost:3000/health
 curl -X POST "http://localhost:3000/submissions?wait=true" \
   -H "Content-Type: application/json" \
   -d '{"language_id": 71, "source_code": "print(21 * 2)"}'
-```
+````
 
 ---
 

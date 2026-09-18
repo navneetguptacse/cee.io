@@ -1,0 +1,25 @@
+{
+  "name": "cee-cli",
+  "version": "1.0.0",
+  "description": "CEE - High-performance Code Execution Engine CLI",
+  "main": "scripts/runner.js",
+  "bin": {
+    "cee": "scripts/runner.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/install.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/navneetguptacse/cee.io.git"
+  },
+  "keywords": [
+    "cee",
+    "code-execution",
+    "judge0",
+    "cli",
+    "sandbox"
+  ],
+  "author": "Navneet Gupta",
+  "license": "MIT"
+}

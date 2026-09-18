@@ -53,18 +53,37 @@ jobs:
           echo "images<<EOF" >> $GITHUB_OUTPUT
           echo "$IMAGES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+      - name: Set lowercase repository name
+        id: repo
+        run: echo "name=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Derive metadata
         id: meta
+      - name: Derive metadata for GHCR
+        id: meta_ghcr
         uses: docker/metadata-action@v5
         with:
           images: ${{ steps.destinations.outputs.images }}
+          images: ghcr.io/${{ steps.repo.outputs.name }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=tag
             type=sha,format=short
 
       - name: Build and push CEE image
+      - name: Derive metadata for Docker Hub
+        if: env.DOCKERHUB_TOKEN != '' && env.DOCKERHUB_USERNAME != ''
+        id: meta_hub
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKERHUB_USERNAME }}/cee
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+            type=sha,format=short
+
+      - name: Build and push CEE image to GHCR
+        id: build_ghcr
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -73,28 +92,63 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta_ghcr.outputs.tags }}
+          labels: ${{ steps.meta_ghcr.outputs.labels }}
           cache-from: type=gha,scope=cee
           cache-to: type=gha,mode=max,scope=cee
+          provenance: false
+
+      - name: Push CEE image to Docker Hub (Optional)
+        id: push_hub
+        if: env.DOCKERHUB_TOKEN != '' && env.DOCKERHUB_USERNAME != ''
+        continue-on-error: true
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/cee/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta_hub.outputs.tags }}
+          labels: ${{ steps.meta_hub.outputs.labels }}
+          cache-from: type=gha,scope=cee
+          provenance: false
 
       # (Optional) Synchronize README to Docker Hub overview.
       # Requires a Docker Hub PAT with 'Admin' permissions; if using Read & Write, set overview via web UI.
       - name: Update Docker Hub Description (Optional)
         if: env.DOCKERHUB_TOKEN != ''
+        if: env.DOCKERHUB_TOKEN != '' && steps.push_hub.outcome == 'success'
         continue-on-error: true
         uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ env.DOCKERHUB_TOKEN }}
           repository: ${{ env.DOCKERHUB_USERNAME }}/cee
-          readme-filepath: ./DOCKERHUB.md
+          readme-filepath: ./HUB.md
           short-description: "High-performance, Judge0-compatible code execution engine and CLI built in Go"
 
       - name: Summary
         run: |
           echo "### Pushed CEE Docker Image" >> $GITHUB_STEP_SUMMARY
+          echo "### CEE Docker Images Summary" >> $GITHUB_STEP_SUMMARY
+          echo "#### GitHub Container Registry (GHCR)" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta_ghcr.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+          if [ -n "$DOCKERHUB_TOKEN" ] && [ -n "$DOCKERHUB_USERNAME" ]; then
+            if [ "${{ steps.push_hub.outcome }}" == "success" ]; then
+              echo "#### Docker Hub: Pushed Successfully ✅" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              echo "${{ steps.meta_hub.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+            else
+              echo "#### Docker Hub: Push Skipped / Authorization Failed ⚠️" >> $GITHUB_STEP_SUMMARY
+              echo "> **Advisory:** Docker Hub returned authorization failure (\`insufficient_scope\`)." >> $GITHUB_STEP_SUMMARY
+              echo "> 1. Create the repository **\`cee\`** on Docker Hub: https://hub.docker.com/repository/create (visibility: Public)" >> $GITHUB_STEP_SUMMARY
+              echo "> 2. Ensure your \`DOCKERHUB_TOKEN\` secret has **Read & Write** access permissions." >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
 
       - name: Prune old untagged image versions
         continue-on-error: true

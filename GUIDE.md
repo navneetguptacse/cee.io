@@ -6,18 +6,19 @@ A step-by-step beginner-friendly guide to executing code, building coding platfo
 
 ## Table of Contents
 
-1. [Quick Overview](#1-quick-overview)
+1. [Quick Overview & Installation](#1-quick-overview--installation)
 2. [Using CEE as a Local CLI Tool](#2-using-cee-as-a-local-cli-tool)
 3. [Running CEE as a Local Server](#3-running-cee-as-a-local-server)
-4. [Integrating CEE with Your Application](#4-integrating-cee-with-your-application)
-5. [Running Multi-File Projects](#5-running-multi-file-projects)
-6. [Deploying CEE to Production](#6-deploying-cee-to-production)
-7. [Understanding Status Codes](#7-understanding-status-codes)
-8. [Frequently Asked Questions](#8-frequently-asked-questions)
+4. [Authenticating and Managing Keys (`cee auth` & `cee token`)](#4-authenticating-and-managing-keys-cee-auth--cee-token)
+5. [Integrating CEE with Your Application](#5-integrating-cee-with-your-application)
+6. [Running Multi-File Projects](#6-running-multi-file-projects)
+7. [Deploying CEE to Production](#7-deploying-cee-to-production)
+8. [Understanding Status Codes](#8-understanding-status-codes)
+9. [Frequently Asked Questions](#9-frequently-asked-questions)
 
 ---
 
-## 1. Quick Overview
+## 1. Quick Overview & Installation
 
 CEE can be used in three ways:
 
@@ -25,22 +26,38 @@ CEE can be used in three ways:
 2. **As an Embedded API Server**: A single binary that serves the Judge0 API for your frontend or local tests.
 3. **As a Distributed Execution Cluster**: Backed by Redis and Docker for high-volume production websites (like LeetCode or HackerRank).
 
-### First-Time Setup (30 Seconds)
+### Installation Options
 
-Clone the repository and build using `make`:
+#### Option A: One-Liner Shell Script (Fastest)
+
+Install the precompiled static binary to `/usr/local/bin/cee` in seconds:
+
+```bash
+# From your self-hosted CEE server:
+curl -fsSL http://<server-ip>/install.sh | bash
+
+# Or directly from GitHub:
+curl -fsSL https://raw.githubusercontent.com/navneetguptacse/cee.io/main/install.sh | bash
+```
+
+#### Option B: Homebrew (macOS & Linux)
+
+```bash
+brew tap navneetguptacse/cee https://github.com/navneetguptacse/cee.io
+brew install navneetguptacse/cee/cee
+```
+
+#### Option C: npm Global Package
+
+```bash
+npm install -g cee-cli
+```
+
+#### Option D: Build from Source
 
 ```bash
 cd cee.io
-
-# Build the stripped static binary
 make build
-```
-
-This creates the executable file at `./bin/cee`.
-
-To install `cee` to your system path (`/usr/local/bin`):
-
-```bash
 sudo make install
 ```
 
@@ -306,7 +323,79 @@ curl "http://localhost:3000/submissions/4adc7ae9-6d80-4119-a9d1-d2a2432ae213"
 
 ---
 
-## 4. Integrating CEE with Your Application
+## 4. Authenticating and Managing Keys (`cee auth` & `cee token`)
+
+CEE incorporates role-based authentication with strict non-leakage security. Invalid keys or role mismatches return generic errors that never reveal credential ownership.
+
+### Logging In
+
+#### As Master (Full Administrative Access)
+
+Master credentials grant full access to execute code, configure optional Prometheus metrics keys, and generate or revoke API keys:
+
+```bash
+cee auth master <your-master-token> -u http://<server-ip>:3000
+```
+
+#### As Guest (Execution & Guest Delegation)
+
+Guest credentials allow code execution and generating additional guest keys:
+
+```bash
+cee auth guest <your-guest-token> -u http://<server-ip>:3000
+```
+
+### Inspecting Session & Permissions
+
+View your active session profile, server URL, and granted capabilities:
+
+```bash
+cee auth status
+# or
+cee token whoami
+```
+
+### Generating New API Keys
+
+Generate a new Guest key:
+
+```bash
+cee token generate guest -d "Frontend Runner"
+```
+
+Generate a new Master key (Master role required):
+
+```bash
+cee token generate master -d "Secondary Admin"
+```
+
+### Listing and Revoking Keys
+
+List all active keys stored on the server:
+
+```bash
+cee token list
+```
+
+Revoke a key (protected by last-master lockout guard):
+
+```bash
+cee token revoke key_xxxx
+```
+
+### Logging Out
+
+Clear your locally saved profile credentials:
+
+```bash
+cee logout
+# or
+cee auth logout
+```
+
+---
+
+## 5. Integrating CEE with Your Application
 
 CEE is 100% compatible with the Judge0 API standard.
 
@@ -377,7 +466,7 @@ execute_code(cpp_code, 54)
 
 ---
 
-## 5. Running Multi-File Projects
+## 6. Running Multi-File Projects
 
 For projects containing multiple source files, libraries, or custom build scripts, use **Language ID 89**.
 
@@ -430,7 +519,7 @@ CEE unpacks the archive in a dedicated sandbox, performs path-traversal safety c
 
 ---
 
-## 6. Deploying CEE to Production
+## 7. Deploying CEE to Production
 
 ### Option A: Standalone Binary on a Linux Server
 
@@ -484,9 +573,20 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 Caddy will automatically request and install an SSL certificate for `cee.yourdomain.com`.
 
+### Option C: Prebuilt Container Image (Docker Hub & GHCR)
+
+Run the prebuilt multi-platform container directly without compiling Go. See [HUB.md](HUB.md) for complete container documentation and options:
+
+```bash
+docker run -d -p 3000:3000 \
+  -e AUTH_TOKEN="$(openssl rand -hex 32)" \
+  -e MAX_WORKERS=8 \
+  --name cee navneetguptacse/cee:latest
+```
+
 ---
 
-## 7. Understanding Status Codes
+## 8. Understanding Status Codes
 
 When CEE completes an execution, `status.id` indicates the outcome:
 
@@ -504,7 +604,7 @@ When CEE completes an execution, `status.id` indicates the outcome:
 
 ---
 
-## 8. Frequently Asked Questions
+## 9. Frequently Asked Questions
 
 ### What languages are supported out of the box?
 

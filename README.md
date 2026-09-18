@@ -2,15 +2,15 @@
 
 **A high-performance, Judge0-compatible code execution engine and CLI built in Go.**
 
+[![Docker Image](https://img.shields.io/badge/docker-navneetguptacse%2Fcee-blue.svg?logo=docker&logoColor=white)](https://hub.docker.com/r/navneetguptacse/cee)
+[![GHCR](https://img.shields.io/badge/ghcr.io-navneetguptacse%2Fcee.io-blue.svg?logo=github&logoColor=white)](https://github.com/navneetguptacse/cee.io/pkgs/container/cee.io)
 [![Go Version](https://img.shields.io/badge/go-1.22+-00ADD8?logo=go&logoColor=white)](https://golang.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![API: Judge0 Compatible](https://img.shields.io/badge/API-Judge0%20Compatible-blue.svg)](https://judge0.com)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Tests](<https://img.shields.io/badge/tests-16%20passed%20(0%20races)-success.svg>)]()
-[![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos-lightgrey.svg)]()
+[![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-lightgrey.svg)]()
 [![User Guide](https://img.shields.io/badge/guide-step--by--step-orange.svg)](GUIDE.md)
 
-> Looking for a beginner-friendly tutorial? Read the complete [User Guide (GUIDE.md)](GUIDE.md).
+> Looking for a beginner-friendly tutorial? Read the complete [User Guide (GUIDE.md)](GUIDE.md). For Docker Hub & GHCR container documentation, see [HUB.md](HUB.md). For end-to-end verification scenarios, see [TEST.md](TEST.md).
 
 ---
 
@@ -72,6 +72,18 @@ Pick the mode that matches your setup:
 
 ### Mode 1 — Using the `cee` CLI
 
+CEE CLI can be installed without needing Go or build tools:
+
+#### Install via One-Liner Script:
+
+```bash
+# From your self-hosted CEE server:
+curl -fsSL http://<server-ip>/install.sh | bash
+
+# Or directly from GitHub:
+curl -fsSL https://raw.githubusercontent.com/navneetguptacse/cee.io/main/install.sh | bash
+```
+
 #### Install via Homebrew (macOS & Linux):
 
 ```bash
@@ -79,21 +91,13 @@ brew tap navneetguptacse/cee https://github.com/navneetguptacse/cee.io
 brew install navneetguptacse/cee/cee
 ```
 
-#### Install via One-Liner Script:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/navneetguptacse/cee.io/main/install.sh | bash
-```
-
 #### Install via NPM:
 
 ```bash
-npm install -g github:navneetguptacse/cee.io
-# Or if published to npm registry:
 npm install -g cee-cli
 ```
 
-#### Or Install from Source:
+#### Or Build and Install from Source:
 
 ```bash
 cd cee.io
@@ -101,36 +105,31 @@ make build
 sudo make install
 ```
 
-# Run inline code directly
+#### Quick CLI Usage:
 
-./bin/cee run -c "print(100 _ 5)" -l py
-./bin/cee run "console.log(21 _ 2)" -l js
+```bash
+# Run inline code directly
+cee run -c "print(100 * 5)" -l py
+cee run "console.log(21 * 2)" -l js
 
 # Pipe code via stdin
-
-echo "print('hello from stdin')" | ./bin/cee run -l py
+echo "print('hello from stdin')" | cee run -l py
 
 # Run Python code directly
-
-./bin/cee run script.py --stdin "Hello World"
+cee run script.py --stdin "Hello World"
 
 # Run C++ code with automatic compilation
-
-./bin/cee run solution.cpp --stdin "10 20" --expected "30"
+cee run solution.cpp --stdin "10 20" --expected "30"
 
 # Run Go code
-
-./bin/cee run main.go
+cee run main.go
 
 # List all supported language IDs and compilers
-
-./bin/cee languages
+cee languages
 
 # Run self-diagnostic suite
-
-./bin/cee test
-
-````
+cee test
+```
 
 ---
 
@@ -151,7 +150,7 @@ curl http://localhost:3000/health
 curl -X POST "http://localhost:3000/submissions?wait=true" \
   -H "Content-Type: application/json" \
   -d '{"language_id": 71, "source_code": "print(21 * 2)"}'
-````
+```
 
 ---
 
@@ -254,7 +253,7 @@ Usage:
   cee [command]
 
 Available Commands:
-  run         Directly compile and execute a local source file
+  run         Directly compile and execute a local source file or inline code
   server      Start the CEE API server and execution workers
   worker      Start a standalone CEE queue worker
   submit      Submit code to a running CEE server
@@ -262,6 +261,11 @@ Available Commands:
   languages   List all supported programming languages
   health      Check health of CEE API server
   test        Run self-diagnostic execution test suite
+  auth        Log in and manage session credentials (master/guest/metrics)
+  logout      Clear active session credentials
+  token       Generate, list, inspect, and revoke API keys
+  config      View or update local CLI configuration profiles
+  connect     Interactive wizard to configure remote server and credentials
 ```
 
 ### Examples
@@ -280,6 +284,38 @@ echo "print(42)" | cee run -l py
 cee run solution.cpp --stdin "10 20" --expected "30"
 ```
 
+**Authenticate with CEE Server:**
+
+```bash
+# Log in as Master (full access & key generation)
+cee auth master <master-key> -u https://cee.io
+
+# Log in as Guest (execution & guest key creation)
+cee auth guest <guest-key> -u https://cee.io
+
+# Check active identity & granted permissions
+cee auth status
+
+# Log out
+cee logout
+```
+
+**API Key Management (Master):**
+
+```bash
+# Generate a new guest key
+cee token generate guest -d "Frontend Runner"
+
+# Generate a master key
+cee token generate master -d "Secondary Admin"
+
+# List all active keys
+cee token list
+
+# Revoke a key
+cee token revoke key_xxxx
+```
+
 **Submit to remote server:**
 
 ```bash
@@ -296,6 +332,25 @@ cee status c506ea63-d1b1-4c2f-8e84-7aaf5a89d98d --url https://cee.io
 
 ## API Reference
 
+### Installation & Binary Distribution (Public)
+
+| Method | Endpoint              | Description                                          |
+| :----- | :-------------------- | :--------------------------------------------------- |
+| `GET`  | `/health`             | Service health status and uptime                     |
+| `GET`  | `/install.sh`         | Automated shell installer script for client machines |
+| `GET`  | `/download/:filename` | Direct download of precompiled static CLI binaries   |
+
+### Authentication & Key Management
+
+| Method   | Endpoint            | Access Level | Description                                         |
+| :------- | :------------------ | :----------- | :-------------------------------------------------- |
+| `POST`   | `/api/auth/login`   | Any Key      | Validate credentials and return granted permissions |
+| `POST`   | `/api/auth/logout`  | Any Key      | End session confirmation                            |
+| `GET`    | `/api/capabilities` | Any Key      | Inspect active role permissions and whoami identity |
+| `POST`   | `/api/keys`         | Master/Guest | Generate a new API key (Master: all; Guest: guest)  |
+| `GET`    | `/api/keys`         | Master Only  | List all managed API keys and metadata              |
+| `DELETE` | `/api/keys/:id`     | Master Only  | Revoke an API key (with last-master lockout guard)  |
+
 ### Submissions
 
 | Method   | Endpoint                        | Description                                        |
@@ -309,37 +364,37 @@ cee status c506ea63-d1b1-4c2f-8e84-7aaf5a89d98d --url https://cee.io
 
 ### System & Discovery
 
-| Method | Endpoint         | Description                                        |
-| :----- | :--------------- | :------------------------------------------------- |
-| `GET`  | `/health`        | Service health status and uptime                   |
-| `GET`  | `/metrics`       | Prometheus metrics scrape endpoint                 |
-| `GET`  | `/languages`     | List active supported languages                    |
-| `GET`  | `/languages/all` | List all languages including archived              |
-| `GET`  | `/languages/:id` | Language detail, source file, compile/run commands |
-| `GET`  | `/statuses`      | List all Judge0 status codes (1–14)                |
-| `GET`  | `/about`         | Service version and maintainer metadata            |
-| `GET`  | `/system_info`   | CPU, RAM, and OS telemetry                         |
-| `GET`  | `/config_info`   | Active execution limits and defaults               |
-| `GET`  | `/executor`      | Active sandbox engine and capabilities             |
-| `GET`  | `/workers`       | Active worker status                               |
-| `GET`  | `/statistics`    | Queue depth and completion counts                  |
+| Method | Endpoint         | Description                                                          |
+| :----- | :--------------- | :------------------------------------------------------------------- |
+| `GET`  | `/health`        | Service health status and uptime                                     |
+| `GET`  | `/metrics`       | Prometheus metrics scrape endpoint (requires metrics or master auth) |
+| `GET`  | `/languages`     | List active supported languages                                      |
+| `GET`  | `/languages/all` | List all languages including archived                                |
+| `GET`  | `/languages/:id` | Language detail, source file, compile/run commands                   |
+| `GET`  | `/statuses`      | List all Judge0 status codes (1–14)                                  |
+| `GET`  | `/about`         | Service version and maintainer metadata                              |
+| `GET`  | `/system_info`   | CPU, RAM, and OS telemetry                                           |
+| `GET`  | `/config_info`   | Active execution limits and defaults                                 |
+| `GET`  | `/executor`      | Active sandbox engine and capabilities                               |
+| `GET`  | `/workers`       | Active worker status                                                 |
+| `GET`  | `/statistics`    | Queue depth and completion counts                                    |
 
 ---
 
 ## Supported Languages
 
-| ID     | Language             | Default Compiler                           | Default Runner    |
-| :----- | :------------------- | :----------------------------------------- | :---------------- |
-| **46** | Bash (5.0.17)        | None                                       | `bash script.sh`  |
-| **50** | C (GCC 9.2.0)        | `gcc -O2 -o a.out main.c`                  | `./a.out`         |
-| **54** | C++ (GCC 9.2.0)      | `g++ -O2 -std=c++17 -o a.out main.cpp`     | `./a.out`         |
-| **60** | Go (1.22.0)          | `go build -o a.out main.go`                | `./a.out`         |
-| **62** | Java (OpenJDK 17)    | `javac -cp .:/usr/local/lib/java/* *.java` | `java -cp . Main` |
-| **63** | JavaScript (Node 18) | None                                       | `node script.js`  |
-| **71** | Python (3.8.10)      | None                                       | `python3 main.py` |
-| **73** | Rust (1.75.0)        | `rustc -O -o a.out main.rs`                | `./a.out`         |
-| **74** | TypeScript (5.0.3)   | `tsc ts-main.ts --outDir .`                | `node ts-main.js` |
-| **89** | Multi-file program   | `compile` / `compile.sh`                   | `run` / `run.sh`  |
+| ID     | Language                | Default Compiler                           | Default Runner    |
+| :----- | :---------------------- | :----------------------------------------- | :---------------- |
+| **46** | Bash (5.0.17)           | None                                       | `bash script.sh`  |
+| **50** | C (GCC 9.2.0)           | `gcc -O2 -o a.out main.c`                  | `./a.out`         |
+| **54** | C++ (GCC 9.2.0)         | `g++ -O2 -std=c++17 -o a.out main.cpp`     | `./a.out`         |
+| **60** | Go (1.22.0)             | `go build -o a.out main.go`                | `./a.out`         |
+| **62** | Java (OpenJDK 17)       | `javac -cp .:/usr/local/lib/java/* *.java` | `java -cp . Main` |
+| **63** | JavaScript (Node 18/22) | None                                       | `node script.js`  |
+| **71** | Python (3.8.10)         | None                                       | `python3 main.py` |
+| **73** | Rust (1.75.0)           | `rustc -O -o a.out main.rs`                | `./a.out`         |
+| **74** | TypeScript (5.0.3)      | `tsc ts-main.ts --outDir .`                | `node ts-main.js` |
+| **89** | Multi-file program      | `compile` / `compile.sh`                   | `run` / `run.sh`  |
 
 _RapidAPI Compatibility Aliases:_ `92` (Python), `93` & `102` (JavaScript), `94` (TypeScript), `95` (Go).
 
@@ -370,7 +425,8 @@ _RapidAPI Compatibility Aliases:_ `92` (Python), `93` & `102` (JavaScript), `94`
 
 | Variable                    | Default                       | Description                                          |
 | :-------------------------- | :---------------------------- | :--------------------------------------------------- |
-| `AUTH_TOKEN`                | Blank                         | Space-separated list of authorized API tokens        |
+| `AUTH_TOKEN`                | Blank                         | Master API key / space-separated bootstrap tokens    |
+| `METRICS_TOKEN`             | Blank                         | Dedicated scraping token for `/metrics`              |
 | `AUTH_HEADERS`              | `X-Auth-Token x-rapidapi-key` | Headers checked for API token                        |
 | `PORT`                      | `3000`                        | HTTP port to bind                                    |
 | `REDIS_URL`                 | Blank                         | Redis connection string (uses memory queue if empty) |

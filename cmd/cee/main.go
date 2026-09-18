@@ -72,7 +72,7 @@ func newServerCmd() *cobra.Command {
 			if cmd.Flags().Changed("redis") && redisURL != "" {
 				cfg.Redis.URL = redisURL
 			}
-			if cmd.Flags().Changed("workers") && concurrency > 0 {
+			if (cmd.Flags().Changed("concurrency") || cmd.Flags().Changed("workers")) && concurrency > 0 {
 				cfg.Worker.Concurrency = concurrency
 			}
 			if cmd.Flags().Changed("executor") && execType != "" {
@@ -150,8 +150,10 @@ func newServerCmd() *cobra.Command {
 	}
 
 	cmd.Flags().IntVarP(&port, "port", "p", 3000, "Port to bind API server")
-	cmd.Flags().StringVar(&redisURL, "redis", "", "Redis URL (leave empty for in-memory queue)")
+	cmd.Flags().StringVarP(&redisURL, "redis", "r", "", "Redis URL (leave empty for in-memory queue)")
 	cmd.Flags().IntVarP(&concurrency, "concurrency", "c", 4, "Number of worker goroutines")
+	cmd.Flags().IntVar(&concurrency, "workers", 4, "Number of worker goroutines (alias for --concurrency)")
+	_ = cmd.Flags().MarkHidden("workers")
 	cmd.Flags().StringVarP(&execType, "executor", "e", "auto", "Executor type (auto, docker, isolate, process)")
 	return cmd
 }
@@ -169,7 +171,7 @@ func newWorkerCmd() *cobra.Command {
 			if cmd.Flags().Changed("redis") && redisURL != "" {
 				cfg.Redis.URL = redisURL
 			}
-			if cmd.Flags().Changed("workers") && concurrency > 0 {
+			if (cmd.Flags().Changed("concurrency") || cmd.Flags().Changed("workers")) && concurrency > 0 {
 				cfg.Worker.Concurrency = concurrency
 			}
 			if cmd.Flags().Changed("executor") && execType != "" {
@@ -201,15 +203,19 @@ func newWorkerCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "Redis connection URL")
+	cmd.Flags().StringVarP(&redisURL, "redis", "r", "redis://localhost:6379", "Redis connection URL")
 	cmd.Flags().IntVarP(&concurrency, "concurrency", "c", 4, "Number of worker goroutines")
+	cmd.Flags().IntVar(&concurrency, "workers", 4, "Number of worker goroutines (alias for --concurrency)")
+	_ = cmd.Flags().MarkHidden("workers")
 	cmd.Flags().StringVarP(&execType, "executor", "e", "auto", "Executor type")
 	return cmd
 }
 
 func newRunCmd() *cobra.Command {
-	var stdin string
+	var input string
+	var stdinAlias string
 	var expectedOutput string
+	var outputAlias string
 	var timeout float64
 	var execType string
 	var codeFlag string
@@ -220,6 +226,13 @@ func newRunCmd() *cobra.Command {
 		Short: "Compile and execute a local source file or inline code",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if input == "" && stdinAlias != "" {
+				input = stdinAlias
+			}
+			if expectedOutput == "" && outputAlias != "" {
+				expectedOutput = outputAlias
+			}
+
 			var code string
 			var lang *languages.Language
 			var label string
@@ -295,7 +308,7 @@ func newRunCmd() *cobra.Command {
 						selectedExecType = "docker"
 					} else if clientCfg.APIURL != "" && clientCfg.APIURL != "http://localhost:3000" {
 						fmt.Printf("-> Docker is not running. Falling back to remote CEE server (%s)...\n", clientCfg.APIURL)
-						return submitCodeToRemote(clientCfg.APIURL, clientCfg.AuthToken, code, lang, stdin, expectedOutput, timeout)
+						return submitCodeToRemote(clientCfg.APIURL, clientCfg.AuthToken, code, lang, input, expectedOutput, timeout)
 					} else {
 						return fmt.Errorf("language '%s' is not installed locally (%s missing), and Docker is not running.\nPlease install %s or start Docker to execute this code", lang.Name, missingBin, missingBin)
 					}
@@ -316,7 +329,7 @@ func newRunCmd() *cobra.Command {
 				Token:                  "cli-run",
 				SourceCode:             code,
 				Language:               lang,
-				Stdin:                  stdin,
+				Stdin:                  input,
 				ExpectedOutput:         expectedOutput,
 				CPUTimeLimit:           timeout,
 				CPUExtraTime:           1.0,
@@ -378,8 +391,10 @@ func newRunCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&codeFlag, "code", "c", "", "Inline source code string")
 	cmd.Flags().StringVarP(&langFlag, "lang", "l", "", "Language name or ID (e.g. py, js, go, cpp, rs)")
-	cmd.Flags().StringVar(&stdin, "stdin", "", "Standard input for the program")
-	cmd.Flags().StringVar(&expectedOutput, "expected", "", "Expected output to compare against")
+	cmd.Flags().StringVarP(&input, "input", "i", "", "Standard input for the program")
+	cmd.Flags().StringVar(&stdinAlias, "stdin", "", "Standard input (alias for -i, --input)")
+	cmd.Flags().StringVarP(&expectedOutput, "expected", "o", "", "Expected output to compare against")
+	cmd.Flags().StringVar(&outputAlias, "output", "", "Expected output (alias for -o, --expected)")
 	cmd.Flags().Float64VarP(&timeout, "timeout", "t", 5.0, "Execution timeout in seconds")
 	cmd.Flags().StringVarP(&execType, "executor", "e", "auto", "Executor type (auto, process, docker)")
 	return cmd
@@ -391,7 +406,10 @@ func newSubmitCmd() *cobra.Command {
 	clientCfg := loadClientConfig()
 	var apiURL string
 	var authToken string
-	var stdin string
+	var input string
+	var stdinAlias string
+	var expectedOutput string
+	var outputAlias string
 	var wait bool
 	var codeFlag string
 	var langFlag string
@@ -401,6 +419,13 @@ func newSubmitCmd() *cobra.Command {
 		Short: "Submit code to a running CEE server",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if input == "" && stdinAlias != "" {
+				input = stdinAlias
+			}
+			if expectedOutput == "" && outputAlias != "" {
+				expectedOutput = outputAlias
+			}
+
 			var code string
 			var lang *languages.Language
 
@@ -458,8 +483,11 @@ func newSubmitCmd() *cobra.Command {
 				SourceCode: &code,
 				LanguageID: lang.ID,
 			}
-			if stdin != "" {
-				subReq.Stdin = &stdin
+			if input != "" {
+				subReq.Stdin = &input
+			}
+			if expectedOutput != "" {
+				subReq.ExpectedOutput = &expectedOutput
 			}
 
 			bodyBytes, _ := json.Marshal(subReq)
@@ -493,11 +521,14 @@ func newSubmitCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&apiURL, "url", clientCfg.APIURL, "CEE server URL")
-	cmd.Flags().StringVar(&authToken, "token", clientCfg.AuthToken, "Authentication token")
+	cmd.Flags().StringVarP(&apiURL, "url", "u", clientCfg.APIURL, "CEE server URL")
+	cmd.Flags().StringVarP(&authToken, "token", "t", clientCfg.AuthToken, "Authentication token")
 	cmd.Flags().StringVarP(&codeFlag, "code", "c", "", "Inline source code string")
 	cmd.Flags().StringVarP(&langFlag, "lang", "l", "", "Language name or ID (e.g. python, py, js, 71)")
-	cmd.Flags().StringVar(&stdin, "stdin", "", "Standard input for the program")
+	cmd.Flags().StringVarP(&input, "input", "i", "", "Standard input for the program")
+	cmd.Flags().StringVar(&stdinAlias, "stdin", "", "Standard input (alias for -i, --input)")
+	cmd.Flags().StringVarP(&expectedOutput, "expected", "o", "", "Expected output to compare against")
+	cmd.Flags().StringVar(&outputAlias, "output", "", "Expected output (alias for -o, --expected)")
 	cmd.Flags().BoolVarP(&wait, "wait", "w", true, "Wait for execution completion")
 	return cmd
 }
@@ -536,8 +567,8 @@ func newStatusCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&apiURL, "url", clientCfg.APIURL, "CEE server URL")
-	cmd.Flags().StringVar(&authToken, "token", clientCfg.AuthToken, "Authentication token")
+	cmd.Flags().StringVarP(&apiURL, "url", "u", clientCfg.APIURL, "CEE server URL")
+	cmd.Flags().StringVarP(&authToken, "token", "t", clientCfg.AuthToken, "Authentication token")
 	return cmd
 }
 
@@ -581,7 +612,7 @@ func newHealthCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&apiURL, "url", clientCfg.APIURL, "CEE server URL")
+	cmd.Flags().StringVarP(&apiURL, "url", "u", clientCfg.APIURL, "CEE server URL")
 	return cmd
 }
 
@@ -958,11 +989,14 @@ func newTokenCmd() *cobra.Command {
 		Short:   "Manage API keys and access tokens",
 		Long:    "Generate, list, inspect, and revoke AUTH and METRICS API keys based on role permissions.",
 	}
+	cmd.PersistentFlags().StringP("url", "u", "", "CEE server URL")
+	cmd.PersistentFlags().StringP("token", "t", "", "Authentication token")
 
 	genCmd := &cobra.Command{
 		Use:   "generate",
 		Short: "Generate a new API key",
 	}
+	genCmd.PersistentFlags().StringP("description", "d", "", "Description / label for the API key")
 
 	// cee token generate auth [role]
 	authCmd := &cobra.Command{
@@ -980,9 +1014,6 @@ func newTokenCmd() *cobra.Command {
 			return executeGenerateKey(apiURL, token, "auth", role, desc)
 		},
 	}
-	authCmd.Flags().StringP("description", "d", "", "Description / label for the API key")
-	authCmd.Flags().String("url", "", "CEE server URL")
-	authCmd.Flags().StringP("token", "t", "", "Authentication token to authorize the request")
 
 	// cee token generate auth guest
 	authGuestCmd := &cobra.Command{
@@ -995,9 +1026,6 @@ func newTokenCmd() *cobra.Command {
 			return executeGenerateKey(apiURL, token, "auth", "guest", desc)
 		},
 	}
-	authGuestCmd.Flags().StringP("description", "d", "", "Description / label for the API key")
-	authGuestCmd.Flags().String("url", "", "CEE server URL")
-	authGuestCmd.Flags().StringP("token", "t", "", "Authentication token")
 
 	// cee token generate auth master
 	authMasterCmd := &cobra.Command{
@@ -1010,9 +1038,6 @@ func newTokenCmd() *cobra.Command {
 			return executeGenerateKey(apiURL, token, "auth", "master", desc)
 		},
 	}
-	authMasterCmd.Flags().StringP("description", "d", "", "Description / label for the API key")
-	authMasterCmd.Flags().String("url", "", "CEE server URL")
-	authMasterCmd.Flags().StringP("token", "t", "", "Authentication token")
 
 	authCmd.AddCommand(authGuestCmd)
 	authCmd.AddCommand(authMasterCmd)
@@ -1028,9 +1053,6 @@ func newTokenCmd() *cobra.Command {
 			return executeGenerateKey(apiURL, token, "auth", "guest", desc)
 		},
 	}
-	genGuestTop.Flags().StringP("description", "d", "", "Description / label for the API key")
-	genGuestTop.Flags().String("url", "", "CEE server URL")
-	genGuestTop.Flags().StringP("token", "t", "", "Authentication token")
 
 	// Top-level alias: cee token generate master
 	genMasterTop := &cobra.Command{
@@ -1043,9 +1065,6 @@ func newTokenCmd() *cobra.Command {
 			return executeGenerateKey(apiURL, token, "auth", "master", desc)
 		},
 	}
-	genMasterTop.Flags().StringP("description", "d", "", "Description / label for the API key")
-	genMasterTop.Flags().String("url", "", "CEE server URL")
-	genMasterTop.Flags().StringP("token", "t", "", "Authentication token")
 
 	// cee token generate metrics
 	metricsCmd := &cobra.Command{
@@ -1058,9 +1077,6 @@ func newTokenCmd() *cobra.Command {
 			return executeGenerateKey(apiURL, token, "metrics", "master", desc)
 		},
 	}
-	metricsCmd.Flags().StringP("description", "d", "", "Description / label for the API key")
-	metricsCmd.Flags().String("url", "", "CEE server URL")
-	metricsCmd.Flags().StringP("token", "t", "", "Authentication token")
 
 	genCmd.AddCommand(authCmd)
 	genCmd.AddCommand(genGuestTop)
@@ -1077,8 +1093,6 @@ func newTokenCmd() *cobra.Command {
 			return executeListKeys(apiURL, token)
 		},
 	}
-	listCmd.Flags().String("url", "", "CEE server URL")
-	listCmd.Flags().StringP("token", "t", "", "Authentication token")
 
 	// cee token revoke <id>
 	revokeCmd := &cobra.Command{
@@ -1091,8 +1105,6 @@ func newTokenCmd() *cobra.Command {
 			return executeRevokeKey(apiURL, token, args[0])
 		},
 	}
-	revokeCmd.Flags().String("url", "", "CEE server URL")
-	revokeCmd.Flags().StringP("token", "t", "", "Authentication token")
 
 	// cee token whoami / capabilities
 	whoamiCmd := &cobra.Command{
@@ -1105,8 +1117,6 @@ func newTokenCmd() *cobra.Command {
 			return executeWhoami(apiURL, token)
 		},
 	}
-	whoamiCmd.Flags().String("url", "", "CEE server URL")
-	whoamiCmd.Flags().StringP("token", "t", "", "Authentication token")
 
 	cmd.AddCommand(genCmd)
 	cmd.AddCommand(listCmd)

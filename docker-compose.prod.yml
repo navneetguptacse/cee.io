@@ -24,7 +24,6 @@ services:
     build:
       context: .
       dockerfile: docker/cee/Dockerfile
-    user: root
     environment:
       - NODE_ENV=production
       - REDIS_URL=redis://redis:6379

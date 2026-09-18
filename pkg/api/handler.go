@@ -276,12 +276,17 @@ func (h *Handler) CreateBatchSubmission(w http.ResponseWriter, r *http.Request) 
 	base64Encoded := r.URL.Query().Get("base64_encoded") == "true"
 	results := make([]CreateTokenResponse, 0, len(req.Submissions))
 
+	jobs := make([]*queue.SubmissionJob, 0, len(req.Submissions))
 	for _, subReq := range req.Submissions {
 		job, err := h.buildJobFromRequest(&subReq, base64Encoded)
 		if err != nil {
 			respondError(w, http.StatusUnprocessableEntity, "Validation Error", err.Error())
 			return
 		}
+		jobs = append(jobs, job)
+	}
+
+	for _, job := range jobs {
 		if err := h.queue.Enqueue(r.Context(), job); err != nil {
 			respondError(w, http.StatusInternalServerError, "Internal Error", err.Error())
 			return
@@ -466,7 +471,7 @@ func formatJobResponse(job *queue.SubmissionJob, base64Encode bool, fields map[s
 		Stdout:         utils.EncodeIfNeeded(job.Stdout, base64Encode),
 		Stderr:         utils.EncodeIfNeeded(job.Stderr, base64Encode),
 		CompileOutput:  utils.EncodeIfNeeded(job.CompileOutput, base64Encode),
-		Message:        job.Message,
+		Message:        utils.EncodeIfNeeded(job.Message, base64Encode),
 		Status:         job.Status,
 		CreatedAt:      job.CreatedAt,
 		FinishedAt:     job.FinishedAt,

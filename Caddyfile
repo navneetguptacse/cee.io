@@ -4,12 +4,15 @@
 {$SITE_ADDRESS::80} {
     # Token-protected Prometheus metrics
     @metrics {
-        path /metrics/*
+        path /metrics /metrics/*
         header X-Metrics-Token {$METRICS_TOKEN:}
     }
     handle @metrics {
         uri strip_prefix /metrics
         reverse_proxy prometheus:9090
+    }
+    handle /metrics {
+        respond "Unauthorized" 401
     }
     handle /metrics/* {
         respond "Unauthorized" 401

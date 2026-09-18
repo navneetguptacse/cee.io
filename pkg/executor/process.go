@@ -84,9 +84,11 @@ func (e *ProcessExecutor) Execute(ctx context.Context, sub *ExecutionSubmission)
 
 		cmd := exec.CommandContext(cCtx, "sh", "-c", compileCmdStr)
 		cmd.Dir = boxDir
-		var cOut, cErr bytes.Buffer
-		cmd.Stdout = &cOut
-		cmd.Stderr = &cErr
+		prepareProcessGroup(cmd)
+		cOut := newBoundedBuffer(MaxOutputLength * 2)
+		cErr := newBoundedBuffer(MaxOutputLength * 2)
+		cmd.Stdout = cOut
+		cmd.Stderr = cErr
 
 		err := cmd.Run()
 		if err != nil || (cmd.ProcessState != nil && cmd.ProcessState.ExitCode() != 0) {
@@ -124,13 +126,15 @@ func (e *ProcessExecutor) Execute(ctx context.Context, sub *ExecutionSubmission)
 	startTime := time.Now()
 	cmd := exec.CommandContext(rCtx, "sh", "-c", runCmdStr)
 	cmd.Dir = boxDir
+	prepareProcessGroup(cmd)
 	if sub.Stdin != "" {
 		cmd.Stdin = strings.NewReader(sub.Stdin)
 	}
 
-	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
+	stdoutBuf := newBoundedBuffer(MaxOutputLength * 2)
+	stderrBuf := newBoundedBuffer(MaxOutputLength * 2)
+	cmd.Stdout = stdoutBuf
+	cmd.Stderr = stderrBuf
 
 	err := cmd.Run()
 	wallTime := time.Since(startTime).Seconds()
@@ -183,9 +187,11 @@ func (e *ProcessExecutor) executeMultiFile(ctx context.Context, boxDir string, s
 
 			cmd := exec.CommandContext(cCtx, "sh", "-c", "bash "+name)
 			cmd.Dir = boxDir
-			var cOut, cErr bytes.Buffer
-			cmd.Stdout = &cOut
-			cmd.Stderr = &cErr
+			prepareProcessGroup(cmd)
+			cOut := newBoundedBuffer(MaxOutputLength * 2)
+			cErr := newBoundedBuffer(MaxOutputLength * 2)
+			cmd.Stdout = cOut
+			cmd.Stderr = cErr
 
 			if err := cmd.Run(); err != nil {
 				output := cErr.String()
@@ -216,13 +222,15 @@ func (e *ProcessExecutor) executeMultiFile(ctx context.Context, boxDir string, s
 	startTime := time.Now()
 	cmd := exec.CommandContext(rCtx, "sh", "-c", "bash "+runScript)
 	cmd.Dir = boxDir
+	prepareProcessGroup(cmd)
 	if sub.Stdin != "" {
 		cmd.Stdin = strings.NewReader(sub.Stdin)
 	}
 
-	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
+	stdoutBuf := newBoundedBuffer(MaxOutputLength * 2)
+	stderrBuf := newBoundedBuffer(MaxOutputLength * 2)
+	cmd.Stdout = stdoutBuf
+	cmd.Stderr = stderrBuf
 
 	err := cmd.Run()
 	wallTime := time.Since(startTime).Seconds()
@@ -249,6 +257,32 @@ func (e *ProcessExecutor) executeMultiFile(ctx context.Context, boxDir string, s
 	}
 
 	return e.parser.Parse(raw, sub), nil
+}
+
+// boundedBuffer limits the maximum bytes written to prevent out-of-memory errors on runaway outputs.
+type boundedBuffer struct {
+	buf   bytes.Buffer
+	limit int
+}
+
+func newBoundedBuffer(limit int) *boundedBuffer {
+	return &boundedBuffer{limit: limit}
+}
+
+func (b *boundedBuffer) Write(p []byte) (n int, err error) {
+	if b.buf.Len() >= b.limit {
+		return len(p), nil
+	}
+	remaining := b.limit - b.buf.Len()
+	if len(p) > remaining {
+		_, err := b.buf.Write(p[:remaining])
+		return len(p), err
+	}
+	return b.buf.Write(p)
+}
+
+func (b *boundedBuffer) String() string {
+	return b.buf.String()
 }
 
 func strPtr(s string) *string {

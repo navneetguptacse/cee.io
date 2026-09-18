@@ -1,6 +1,7 @@
 package languages
 
 import (
+	"os/exec"
 	"sort"
 	"sync"
 )
@@ -179,4 +180,76 @@ func GetActiveLanguages() []*Language {
 // GetAllLanguages returns all active and archived languages.
 func GetAllLanguages() []*Language {
 	return GetActiveLanguages()
+}
+
+// IsHostAvailable checks whether required compilers and interpreters exist on the host PATH.
+func (l *Language) IsHostAvailable() (bool, string) {
+	if l == nil {
+		return false, "language is nil"
+	}
+
+	checkAny := func(bins ...string) bool {
+		for _, b := range bins {
+			if _, err := exec.LookPath(b); err == nil {
+				return true
+			}
+		}
+		return false
+	}
+
+	checkAll := func(bins ...string) (bool, string) {
+		for _, b := range bins {
+			if _, err := exec.LookPath(b); err != nil {
+				return false, b
+			}
+		}
+		return true, ""
+	}
+
+	switch l.ID {
+	case LangBash:
+		if !checkAny("bash", "sh") {
+			return false, "bash"
+		}
+	case LangC:
+		if !checkAny("gcc", "clang") {
+			return false, "gcc"
+		}
+	case LangCPP:
+		if !checkAny("g++", "clang++") {
+			return false, "g++"
+		}
+	case LangGo:
+		if !checkAny("go") {
+			return false, "go"
+		}
+	case LangJava:
+		if ok, missing := checkAll("javac", "java"); !ok {
+			return false, missing
+		}
+	case LangJavaScript:
+		if !checkAny("node", "nodejs") {
+			return false, "node"
+		}
+	case LangPython:
+		if !checkAny("python3", "python") {
+			return false, "python3"
+		}
+	case LangRust:
+		if !checkAny("rustc") {
+			return false, "rustc"
+		}
+	case LangTypeScript:
+		if ok, missing := checkAll("tsc", "node"); !ok {
+			return false, missing
+		}
+	case LangMultiFile:
+		if !checkAny("bash", "sh") {
+			return false, "bash"
+		}
+	default:
+		return true, ""
+	}
+
+	return true, ""
 }

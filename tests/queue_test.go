@@ -75,3 +75,44 @@ func TestMemoryQueue_WaitForResultSync(t *testing.T) {
 		t.Errorf("WaitForResult took too long: %v (expected ~50ms)", duration)
 	}
 }
+
+func TestMemoryQueue_TTLEviction(t *testing.T) {
+	q := queue.NewMemoryQueueWithTTL(100, 50*time.Millisecond)
+	defer q.Close()
+
+	ctx := context.Background()
+	token := "ttl-eviction-token"
+	job := &queue.SubmissionJob{
+		Token:      token,
+		SourceCode: "print('ttl test')",
+		LanguageID: 71,
+	}
+
+	if err := q.Enqueue(ctx, job); err != nil {
+		t.Fatalf("Enqueue failed: %v", err)
+	}
+
+	// Complete job with timestamp 100ms in the past
+	oldTime := time.Now().Add(-100 * time.Millisecond).UTC().Format(time.RFC3339)
+	job.FinishedAt = &oldTime
+	job.SetStatus(languages.GetStatusByID(languages.StatusAccepted))
+	q.SignalCompleted(token, job)
+
+	// Ensure job is currently retrievable
+	beforeCleanup, err := q.GetSubmission(ctx, token)
+	if err != nil || beforeCleanup == nil {
+		t.Fatalf("expected job to exist before cleanup, got err=%v", err)
+	}
+
+	// Run TTL cleanup
+	q.CleanupExpired()
+
+	// Verify job was evicted
+	afterCleanup, err := q.GetSubmission(ctx, token)
+	if err != nil {
+		t.Fatalf("GetSubmission error: %v", err)
+	}
+	if afterCleanup != nil {
+		t.Errorf("expected job %s to be evicted after TTL expiration, but still exists", token)
+	}
+}

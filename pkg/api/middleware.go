@@ -202,17 +202,62 @@ func RateLimiterMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 	}
 }
 
+var trustedProxyCIDRs []*net.IPNet
+
+func init() {
+	cidrs := []string{
+		"127.0.0.0/8",
+		"::1/128",
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+	}
+	for _, c := range cidrs {
+		if _, ipNet, err := net.ParseCIDR(c); err == nil {
+			trustedProxyCIDRs = append(trustedProxyCIDRs, ipNet)
+		}
+	}
+}
+
+func isTrustedProxy(remoteAddr string) bool {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		host = remoteAddr
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	for _, cidr := range trustedProxyCIDRs {
+		if cidr.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 func getClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		return strings.TrimSpace(parts[0])
+	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		remoteHost = r.RemoteAddr
 	}
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return strings.TrimSpace(xri)
+
+	// Only trust forwarding headers if the direct connecting peer is a trusted proxy
+	if isTrustedProxy(r.RemoteAddr) {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			clientIP := strings.TrimSpace(parts[0])
+			if net.ParseIP(clientIP) != nil {
+				return clientIP
+			}
+		}
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			clientIP := strings.TrimSpace(xri)
+			if net.ParseIP(clientIP) != nil {
+				return clientIP
+			}
+		}
 	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil {
-		return host
-	}
-	return r.RemoteAddr
+
+	return remoteHost
 }

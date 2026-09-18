@@ -237,9 +237,9 @@ func (d *DockerExecutor) executeMultiFile(ctx context.Context, containerID strin
 
 func (d *DockerExecutor) writeFileToBox(ctx context.Context, containerID, fileName string, content []byte) error {
 	b64Content := base64.StdEncoding.EncodeToString(content)
-	cmd := fmt.Sprintf("echo '%s' | base64 -d > '/box/%s'", b64Content, fileName)
+	cmd := fmt.Sprintf("base64 -d > '/box/%s'", fileName)
 
-	res, err := d.runCommand(ctx, containerID, cmd, 10, "")
+	res, err := d.runCommand(ctx, containerID, cmd, 10, b64Content)
 	if err != nil {
 		return fmt.Errorf("failed to write file %s: %w", fileName, err)
 	}
@@ -250,7 +250,12 @@ func (d *DockerExecutor) writeFileToBox(ctx context.Context, containerID, fileNa
 }
 
 func (d *DockerExecutor) copyAdditionalFiles(ctx context.Context, containerID string, b64Zip string) error {
-	if err := d.writeFileToBox(ctx, containerID, "_additional.zip", []byte(b64Zip)); err != nil {
+	rawZip, err := base64.StdEncoding.DecodeString(b64Zip)
+	if err != nil {
+		return fmt.Errorf("invalid base64 zip data: %w", err)
+	}
+
+	if err := d.writeFileToBox(ctx, containerID, "_additional.zip", rawZip); err != nil {
 		return err
 	}
 

@@ -284,3 +284,50 @@ func TestAPI_AuthMiddleware(t *testing.T) {
 		t.Errorf("expected 200 OK, got %d", recAuth.Code)
 	}
 }
+
+func TestCompareOutput_CRLF(t *testing.T) {
+	// CRLF vs LF
+	actual := "line1\r\nline2\r\nline3\r\n"
+	expected := "line1\nline2\nline3\n"
+	if !utils.CompareOutput(actual, expected) {
+		t.Errorf("expected CRLF and LF strings to match identically")
+	}
+
+	// Trailing line spaces
+	actualSpaces := "line1  \r\nline2\t\nline3\n"
+	expectedSpaces := "line1\nline2\nline3"
+	if !utils.CompareOutput(actualSpaces, expectedSpaces) {
+		t.Errorf("expected strings with trailing line spaces to match")
+	}
+
+	// Different content should still fail
+	if utils.CompareOutput("line1\r\nlineA\r\n", "line1\nlineB\n") {
+		t.Errorf("expected different content to not match")
+	}
+}
+
+func TestAPI_BatchValidationAtomic(t *testing.T) {
+	handler, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	code := "print(1)"
+	invalidID := 999999 // Non-existent language ID
+
+	batchReq := api.BatchSubmissionRequest{
+		Submissions: []api.SubmissionRequest{
+			{SourceCode: &code, LanguageID: 71},
+			{SourceCode: &code, LanguageID: invalidID}, // should cause atomic rejection
+		},
+	}
+	body, _ := json.Marshal(batchReq)
+	req := httptest.NewRequest(http.MethodPost, "/submissions/batch", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 Unprocessable Entity, got %d", rec.Code)
+	}
+}
+

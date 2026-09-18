@@ -31,7 +31,7 @@ var rootCmd = &cobra.Command{
 }
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -49,6 +49,8 @@ func init() {
 	rootCmd.AddCommand(newLanguagesCmd())
 	rootCmd.AddCommand(newHealthCmd())
 	rootCmd.AddCommand(newSelfTestCmd())
+	rootCmd.AddCommand(newConnectCmd())
+	rootCmd.AddCommand(newConfigCmd())
 }
 
 func newServerCmd() *cobra.Command {
@@ -240,6 +242,8 @@ func newRunCmd() *cobra.Command {
 						}
 						lang = languages.GetLanguageByID(langID)
 					}
+				} else if looksLikeFilePath(arg) {
+					return fmt.Errorf("file not found: %s", arg)
 				} else {
 					code = arg
 					label = "inline"
@@ -267,12 +271,30 @@ func newRunCmd() *cobra.Command {
 			}
 
 			cfg := config.Load()
-			if execType != "" {
-				cfg.Executor.Type = execType
-			} else {
-				cfg.Executor.Type = "process"
+			clientCfg := loadClientConfig()
+
+			// Check host language availability and dynamically fallback
+			isHostAvailable, missingBin := lang.IsHostAvailable()
+
+			selectedExecType := execType
+			if selectedExecType == "" || selectedExecType == "auto" {
+				if isHostAvailable {
+					selectedExecType = "process"
+				} else {
+					fmt.Printf("Language runtime (%s) not found on host.\n", missingBin)
+					if executor.IsDockerAvailable(cfg.Docker.SocketPath) {
+						fmt.Printf("-> Falling back to Docker container (%s)...\n", lang.Image)
+						selectedExecType = "docker"
+					} else if clientCfg.APIURL != "" && clientCfg.APIURL != "http://localhost:3000" {
+						fmt.Printf("-> Docker is not running. Falling back to remote CEE server (%s)...\n", clientCfg.APIURL)
+						return submitCodeToRemote(clientCfg.APIURL, clientCfg.AuthToken, code, lang, stdin, expectedOutput, timeout)
+					} else {
+						return fmt.Errorf("language '%s' is not installed locally (%s missing), and Docker is not running.\nPlease install %s or start Docker to execute this code", lang.Name, missingBin, missingBin)
+					}
+				}
 			}
 
+			cfg.Executor.Type = selectedExecType
 			execEngine, err := executor.NewExecutor(cfg)
 			if err != nil {
 				return err
@@ -351,12 +373,14 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().StringVar(&stdin, "stdin", "", "Standard input for the program")
 	cmd.Flags().StringVar(&expectedOutput, "expected", "", "Expected output to compare against")
 	cmd.Flags().Float64VarP(&timeout, "timeout", "t", 5.0, "Execution timeout in seconds")
-	cmd.Flags().StringVarP(&execType, "executor", "e", "process", "Executor type (process, docker)")
+	cmd.Flags().StringVarP(&execType, "executor", "e", "auto", "Executor type (auto, process, docker)")
 	return cmd
 }
 
 // ── 4. cee submit [file] ──────────────────────────────────────────────────────
+// ── 4. cee submit [file] ──────────────────────────────────────────────────────
 func newSubmitCmd() *cobra.Command {
+	clientCfg := loadClientConfig()
 	var apiURL string
 	var authToken string
 	var stdin string
@@ -396,6 +420,8 @@ func newSubmitCmd() *cobra.Command {
 						}
 						lang = languages.GetLanguageByID(langID)
 					}
+				} else if looksLikeFilePath(arg) {
+					return fmt.Errorf("file not found: %s", arg)
 				} else {
 					code = arg
 				}
@@ -429,7 +455,7 @@ func newSubmitCmd() *cobra.Command {
 			}
 
 			bodyBytes, _ := json.Marshal(subReq)
-			endpoint := fmt.Sprintf("%s/submissions", apiURL)
+			endpoint := fmt.Sprintf("%s/submissions", strings.TrimRight(apiURL, "/"))
 			if wait {
 				endpoint += "?wait=true"
 			}
@@ -459,8 +485,8 @@ func newSubmitCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&apiURL, "url", "http://localhost:3000", "CEE server URL")
-	cmd.Flags().StringVar(&authToken, "token", "", "Authentication token")
+	cmd.Flags().StringVar(&apiURL, "url", clientCfg.APIURL, "CEE server URL")
+	cmd.Flags().StringVar(&authToken, "token", clientCfg.AuthToken, "Authentication token")
 	cmd.Flags().StringVarP(&codeFlag, "code", "c", "", "Inline source code string")
 	cmd.Flags().StringVarP(&langFlag, "lang", "l", "", "Language name or ID (e.g. python, py, js, 71)")
 	cmd.Flags().StringVar(&stdin, "stdin", "", "Standard input for the program")
@@ -469,6 +495,7 @@ func newSubmitCmd() *cobra.Command {
 }
 
 func newStatusCmd() *cobra.Command {
+	clientCfg := loadClientConfig()
 	var apiURL string
 	var authToken string
 
@@ -478,7 +505,7 @@ func newStatusCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			token := args[0]
-			endpoint := fmt.Sprintf("%s/submissions/%s", apiURL, token)
+			endpoint := fmt.Sprintf("%s/submissions/%s", strings.TrimRight(apiURL, "/"), token)
 
 			req, _ := http.NewRequest(http.MethodGet, endpoint, nil)
 			if authToken != "" {
@@ -501,8 +528,8 @@ func newStatusCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&apiURL, "url", "http://localhost:3000", "CEE server URL")
-	cmd.Flags().StringVar(&authToken, "token", "", "Authentication token")
+	cmd.Flags().StringVar(&apiURL, "url", clientCfg.APIURL, "CEE server URL")
+	cmd.Flags().StringVar(&authToken, "token", clientCfg.AuthToken, "Authentication token")
 	return cmd
 }
 
@@ -529,12 +556,13 @@ func newLanguagesCmd() *cobra.Command {
 }
 
 func newHealthCmd() *cobra.Command {
+	clientCfg := loadClientConfig()
 	var apiURL string
 	cmd := &cobra.Command{
 		Use:   "health",
 		Short: "Check health of CEE API server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			resp, err := http.Get(apiURL + "/health")
+			resp, err := http.Get(strings.TrimRight(apiURL, "/") + "/health")
 			if err != nil {
 				return fmt.Errorf("health check failed: %w", err)
 			}
@@ -545,7 +573,7 @@ func newHealthCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&apiURL, "url", "http://localhost:3000", "CEE server URL")
+	cmd.Flags().StringVar(&apiURL, "url", clientCfg.APIURL, "CEE server URL")
 	return cmd
 }
 
@@ -660,4 +688,257 @@ func parseLanguage(s string) *languages.Language {
 		}
 		return nil
 	}
+}
+
+func looksLikeFilePath(s string) bool {
+	if strings.ContainsAny(s, "/\\") {
+		return true
+	}
+	return filepath.Ext(s) != ""
+}
+
+// ClientConfig holds local CLI client preferences and server target.
+type ClientConfig struct {
+	APIURL    string `json:"api_url"`
+	AuthToken string `json:"auth_token,omitempty"`
+}
+
+func getClientConfigFile() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ".cee-config.json"
+	}
+	return filepath.Join(home, ".cee", "config.json")
+}
+
+func loadClientConfig() ClientConfig {
+	cfg := ClientConfig{
+		APIURL:    os.Getenv("CEE_API_URL"),
+		AuthToken: os.Getenv("CEE_AUTH_TOKEN"),
+	}
+
+	configFile := getClientConfigFile()
+	if data, err := os.ReadFile(configFile); err == nil {
+		var fileCfg ClientConfig
+		if err := json.Unmarshal(data, &fileCfg); err == nil {
+			if cfg.APIURL == "" && fileCfg.APIURL != "" {
+				cfg.APIURL = fileCfg.APIURL
+			}
+			if cfg.AuthToken == "" && fileCfg.AuthToken != "" {
+				cfg.AuthToken = fileCfg.AuthToken
+			}
+		}
+	}
+
+	if cfg.APIURL == "" {
+		cfg.APIURL = "http://localhost:3000"
+	}
+	return cfg
+}
+
+func saveClientConfig(cfg ClientConfig) error {
+	configFile := getClientConfigFile()
+	if err := os.MkdirAll(filepath.Dir(configFile), 0755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(configFile, data, 0600)
+}
+
+func newConnectCmd() *cobra.Command {
+	var token string
+
+	cmd := &cobra.Command{
+		Use:   "connect <api-url>",
+		Short: "Connect CLI to a remote CEE server and verify connection",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rawURL := strings.TrimRight(args[0], "/")
+			if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+				rawURL = "https://" + rawURL
+			}
+
+			fmt.Printf("Probing CEE server at %s/health...\n", rawURL)
+			client := &http.Client{Timeout: 5 * time.Second}
+			resp, err := client.Get(rawURL + "/health")
+			if err != nil {
+				return fmt.Errorf("could not connect to %s: %w", rawURL, err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("server at %s returned status %d (expected 200)", rawURL, resp.StatusCode)
+			}
+
+			cfg := ClientConfig{
+				APIURL:    rawURL,
+				AuthToken: token,
+			}
+			if err := saveClientConfig(cfg); err != nil {
+				return fmt.Errorf("failed saving config: %w", err)
+			}
+
+			fmt.Printf("Successfully connected! CEE CLI configured to use: %s\n", rawURL)
+			fmt.Printf("Configuration saved to: %s\n", getClientConfigFile())
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&token, "token", "t", "", "Authentication token for remote API")
+	return cmd
+}
+
+func newConfigCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "config",
+		Short: "Manage CLI configuration (API URL, tokens)",
+	}
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "show",
+		Short: "Display active CLI configuration",
+		Run: func(cmd *cobra.Command, args []string) {
+			cfg := loadClientConfig()
+			fmt.Println("Active CEE CLI Configuration:")
+			fmt.Printf("  API URL:     %s\n", cfg.APIURL)
+			if cfg.AuthToken != "" {
+				masked := cfg.AuthToken
+				if len(masked) > 6 {
+					masked = masked[:4] + "..."
+				}
+				fmt.Printf("  Auth Token:  %s\n", masked)
+			} else {
+				fmt.Println("  Auth Token:  (none)")
+			}
+			fmt.Printf("  Config File: %s\n", getClientConfigFile())
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "set-url <url>",
+		Short: "Set the remote CEE API URL",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg := loadClientConfig()
+			cfg.APIURL = strings.TrimRight(args[0], "/")
+			if err := saveClientConfig(cfg); err != nil {
+				return err
+			}
+			fmt.Printf("API URL updated to: %s\n", cfg.APIURL)
+			return nil
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "set-token <token>",
+		Short: "Set the remote CEE API authentication token",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg := loadClientConfig()
+			cfg.AuthToken = args[0]
+			if err := saveClientConfig(cfg); err != nil {
+				return err
+			}
+			fmt.Println("Authentication token updated successfully.")
+			return nil
+		},
+	})
+
+	return cmd
+}
+
+func submitCodeToRemote(apiURL, authToken, code string, lang *languages.Language, stdin, expectedOutput string, timeout float64) error {
+	subReq := api.SubmissionRequest{
+		SourceCode: &code,
+		LanguageID: lang.ID,
+	}
+	if stdin != "" {
+		subReq.Stdin = &stdin
+	}
+	if expectedOutput != "" {
+		subReq.ExpectedOutput = &expectedOutput
+	}
+	if timeout > 0 {
+		subReq.CPUTimeLimit = &timeout
+		wallTimeout := timeout + 2.0
+		subReq.WallTimeLimit = &wallTimeout
+	}
+
+	bodyBytes, err := json.Marshal(subReq)
+	if err != nil {
+		return err
+	}
+
+	endpoint := fmt.Sprintf("%s/submissions?wait=true", strings.TrimRight(apiURL, "/"))
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if authToken != "" {
+		req.Header.Set("X-Auth-Token", authToken)
+	}
+
+	client := &http.Client{Timeout: time.Duration(timeout+15) * time.Second}
+	start := time.Now()
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("remote execution failed connecting to %s: %w", apiURL, err)
+	}
+	defer resp.Body.Close()
+
+	duration := time.Since(start)
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed reading response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("remote API returned HTTP %d: %s", resp.StatusCode, string(respBytes))
+	}
+
+	var res api.SubmissionResponse
+	if err := json.Unmarshal(respBytes, &res); err != nil {
+		return fmt.Errorf("failed parsing submission response: %w", err)
+	}
+
+	fmt.Println("\n──────────────────── Execution Result (Remote) ───────────")
+	fmt.Printf("Status:    %s (ID: %d)\n", res.Status.Description, res.Status.ID)
+	if res.ExitCode != nil {
+		fmt.Printf("Exit Code: %d\n", *res.ExitCode)
+	}
+	if res.WallTime != nil {
+		fmt.Printf("Wall Time: %ss (total network: %v)\n", *res.WallTime, duration.Round(time.Millisecond))
+	}
+
+	if res.CompileOutput != nil && *res.CompileOutput != "" {
+		fmt.Printf("\n[Compilation Output]:\n%s\n", *res.CompileOutput)
+	}
+
+	if res.Stdout != nil && *res.Stdout != "" {
+		fmt.Printf("\n[Stdout]:\n%s", *res.Stdout)
+		if !strings.HasSuffix(*res.Stdout, "\n") {
+			fmt.Println()
+		}
+	}
+
+	if expectedOutput != "" && res.Status.ID == languages.StatusWrongAnswer {
+		fmt.Printf("\n[Expected Output]:\n%s", expectedOutput)
+		if !strings.HasSuffix(expectedOutput, "\n") {
+			fmt.Println()
+		}
+	}
+
+	if res.Stderr != nil && *res.Stderr != "" {
+		fmt.Printf("\n[Stderr]:\n%s", *res.Stderr)
+		if !strings.HasSuffix(*res.Stderr, "\n") {
+			fmt.Println()
+		}
+	}
+	fmt.Println("──────────────────────────────────────────────────────────")
+	return nil
 }

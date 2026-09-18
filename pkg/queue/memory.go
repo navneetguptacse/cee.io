@@ -12,23 +12,78 @@ import (
 )
 
 type MemoryQueue struct {
-	jobs       chan *SubmissionJob
-	store      sync.Map // token -> *SubmissionJob
-	listeners  sync.Map // token -> chan *SubmissionJob
-	inQueue    int64
-	processing int64
-	completed  int64
-	failed     int64
-	closed     atomic.Bool
+	jobs          chan *SubmissionJob
+	store         sync.Map // token -> *SubmissionJob
+	listeners     sync.Map // token -> chan *SubmissionJob
+	inQueue       int64
+	processing    int64
+	completed     int64
+	failed        int64
+	closed        atomic.Bool
+	stopCleanup   chan struct{}
+	cleanupTicker *time.Ticker
+	ttl           time.Duration
 }
 
 func NewMemoryQueue(bufferSize int) *MemoryQueue {
+	return NewMemoryQueueWithTTL(bufferSize, time.Hour)
+}
+
+func NewMemoryQueueWithTTL(bufferSize int, ttl time.Duration) *MemoryQueue {
 	if bufferSize <= 0 {
 		bufferSize = 10000
 	}
-	return &MemoryQueue{
-		jobs: make(chan *SubmissionJob, bufferSize),
+	if ttl <= 0 {
+		ttl = time.Hour
 	}
+
+	q := &MemoryQueue{
+		jobs:          make(chan *SubmissionJob, bufferSize),
+		stopCleanup:   make(chan struct{}),
+		cleanupTicker: time.NewTicker(30 * time.Second),
+		ttl:           ttl,
+	}
+
+	go func() {
+		for {
+			select {
+			case <-q.cleanupTicker.C:
+				q.cleanupExpired()
+			case <-q.stopCleanup:
+				return
+			}
+		}
+	}()
+
+	return q
+}
+
+// CleanupExpired removes finished submissions older than the queue TTL.
+func (q *MemoryQueue) CleanupExpired() {
+	q.cleanupExpired()
+}
+
+func (q *MemoryQueue) cleanupExpired() {
+	now := time.Now()
+	q.store.Range(func(key, value any) bool {
+		job, ok := value.(*SubmissionJob)
+		if !ok {
+			return true
+		}
+		if job.IsFinished() {
+			job.mu.RLock()
+			finishedAtStr := job.FinishedAt
+			job.mu.RUnlock()
+			if finishedAtStr != nil && *finishedAtStr != "" {
+				if t, err := time.Parse(time.RFC3339, *finishedAtStr); err == nil {
+					if now.Sub(t) > q.ttl {
+						q.store.Delete(key)
+					}
+				}
+			}
+		}
+		return true
+	})
 }
 
 func (q *MemoryQueue) Enqueue(ctx context.Context, job *SubmissionJob) error {
@@ -158,6 +213,12 @@ func (q *MemoryQueue) WaitForResult(ctx context.Context, token string, timeout t
 func (q *MemoryQueue) Close() error {
 	if q.closed.CompareAndSwap(false, true) {
 		close(q.jobs)
+		if q.cleanupTicker != nil {
+			q.cleanupTicker.Stop()
+		}
+		if q.stopCleanup != nil {
+			close(q.stopCleanup)
+		}
 	}
 	return nil
 }

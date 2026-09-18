@@ -69,3 +69,23 @@ func TestJudge0Statuses(t *testing.T) {
 		t.Errorf("expected Status 5 to be 'Time Limit Exceeded', got %s", s5.Description)
 	}
 }
+
+func TestHostLanguageAvailability(t *testing.T) {
+	// Bash should be available on all Unix/macOS test machines
+	bashLang := languages.GetLanguageByID(languages.LangBash)
+	if bashLang == nil {
+		t.Fatalf("expected Bash language to exist")
+	}
+	ok, missing := bashLang.IsHostAvailable()
+	if !ok {
+		t.Errorf("expected bash to be available on host, missing: %s", missing)
+	}
+
+	// Nil language test
+	var nilLang *languages.Language
+	ok, _ = nilLang.IsHostAvailable()
+	if ok {
+		t.Errorf("expected nil language to return false")
+	}
+}
+

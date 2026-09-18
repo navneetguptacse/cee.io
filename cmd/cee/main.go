@@ -1161,27 +1161,40 @@ func executeLogin(expectedRole, key, metricsKey, urlFlag string) error {
 	req.Header.Set("X-Auth-Token", key)
 
 	resp, err := client.Do(req)
-	var capInfo auth.CapabilityInfo
-	serverVerified := false
+	if err != nil {
+		return fmt.Errorf("failed to connect to server at %s: %w\n(Verify that the server is online and accessible)", targetURL, err)
+	}
+	defer resp.Body.Close()
 
-	if err == nil {
-		defer resp.Body.Close()
-		if resp.StatusCode == http.StatusOK {
-			b, _ := io.ReadAll(resp.Body)
-			if err := json.Unmarshal(b, &capInfo); err == nil {
-				serverVerified = true
-			}
-		} else if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return fmt.Errorf("authentication failed (HTTP %d): Invalid or revoked API key", resp.StatusCode)
-		}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("authentication failed (HTTP %d): Invalid or revoked API key", resp.StatusCode)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("server error (HTTP %d) verifying API key", resp.StatusCode)
 	}
 
-	actualRole := expectedRole
-	if serverVerified {
-		actualRole = strings.ToLower(string(capInfo.Role))
-		if expectedRole == "master" && actualRole == "guest" {
-			return fmt.Errorf("permission mismatch: Provided key is a GUEST credential, not a MASTER key.\nRun 'cee auth guest <key>' to log in as Guest")
-		}
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed reading response from server: %w", err)
+	}
+
+	var capInfo auth.CapabilityInfo
+	if err := json.Unmarshal(b, &capInfo); err != nil {
+		return fmt.Errorf("failed parsing server capabilities response: %w", err)
+	}
+
+	// 1. Ensure the credential is an AUTH key, not a METRICS key
+	if capInfo.CredentialType != auth.TypeAuth {
+		return fmt.Errorf("invalid credential type: Provided key is a METRICS credential (%s), not an AUTH key.\nMetrics credentials are configured with 'cee auth metrics <key>' or 'cee auth master <auth-key> -m <metrics-key>'", capInfo.CredentialType)
+	}
+
+	// 2. Strict Role Match: Ensure expectedRole matches the key's actual role
+	actualRole := strings.ToLower(string(capInfo.Role))
+	if expectedRole == "guest" && actualRole != "guest" {
+		return fmt.Errorf("permission mismatch: Provided key is a %s credential, not a GUEST key.\nRun 'cee auth master <key>' to log in as Master", strings.ToUpper(actualRole))
+	}
+	if expectedRole == "master" && actualRole != "master" {
+		return fmt.Errorf("permission mismatch: Provided key is a %s credential, not a MASTER key.\nRun 'cee auth guest <key>' to log in as Guest", strings.ToUpper(actualRole))
 	}
 
 	cfg.APIURL = targetURL
@@ -1220,18 +1233,9 @@ func executeLogin(expectedRole, key, metricsKey, urlFlag string) error {
 	fmt.Printf("✓ Successfully logged in as %s!\n", strings.ToUpper(actualRole))
 	fmt.Println("──────────────────────────────────────────────────────────")
 	fmt.Printf("Server URL:      %s\n", targetURL)
-	if serverVerified {
-		fmt.Printf("Key ID:          %s\n", capInfo.KeyID)
-		fmt.Printf("Prefix:          %s\n", capInfo.Prefix)
-		fmt.Println("Server Status:   Verified online & active")
-	} else {
-		masked := key
-		if len(masked) > 12 {
-			masked = masked[:6] + "..." + masked[len(masked)-4:]
-		}
-		fmt.Printf("API Key:         %s\n", masked)
-		fmt.Println("Server Status:   Saved locally (server was unreachable)")
-	}
+	fmt.Printf("Key ID:          %s\n", capInfo.KeyID)
+	fmt.Printf("Prefix:          %s\n", capInfo.Prefix)
+	fmt.Println("Server Status:   Verified online & active")
 	if cfg.MetricsToken != "" {
 		maskedM := cfg.MetricsToken
 		if len(maskedM) > 12 {
@@ -1242,7 +1246,7 @@ func executeLogin(expectedRole, key, metricsKey, urlFlag string) error {
 	fmt.Println("──────────────────────────────────────────────────────────")
 	fmt.Println("Role Permissions:")
 	if actualRole == "master" {
-		fmt.Println("  [ALLOWED] Normal API Execution (Run, Submit, Languages)")
+		fmt.Println("  [ALLOWED] API Execution (Run, Submit, Languages)")
 		fmt.Println("  [ALLOWED] Generate Guest AUTH Keys")
 		fmt.Println("  [ALLOWED] Generate Master AUTH Keys")
 		fmt.Println("  [ALLOWED] Generate Metrics Keys")
@@ -1253,7 +1257,7 @@ func executeLogin(expectedRole, key, metricsKey, urlFlag string) error {
 			fmt.Println("  [OPTIONAL] Metrics Access: Not configured (use 'cee auth metrics <key>')")
 		}
 	} else {
-		fmt.Println("  [ALLOWED] Normal API Execution (Run, Submit, Languages)")
+		fmt.Println("  [ALLOWED] API Execution (Run, Submit, Languages)")
 		fmt.Println("  [ALLOWED] Generate Guest AUTH Keys (Delegation)")
 		fmt.Println("  [DENIED]  Generate Master Keys")
 		fmt.Println("  [DENIED]  Generate Metrics Keys")

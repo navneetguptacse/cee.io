@@ -173,4 +173,3 @@ func newWorkerCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&execType, "executor", "e", "auto", "Executor type")
 	return cmd
 }
-

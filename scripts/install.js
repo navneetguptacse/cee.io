@@ -1,9 +1,10 @@
 const fs = require("fs");
 const path = require("path");
+const http = require("http");
 const https = require("https");
 const { execSync } = require("child_process");
 
-const REPO = "navneetguptacse/cee.io";
+const DEFAULT_SERVER = "http://100.52.188.50";
 
 function getPlatformArch() {
   const platformMap = {
@@ -33,7 +34,8 @@ function getPlatformArch() {
 
 function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {
-    https
+    const client = url.startsWith("https") ? https : http;
+    client
       .get(url, (res) => {
         if (
           res.statusCode >= 300 &&
@@ -67,23 +69,46 @@ async function main() {
     fs.mkdirSync(binDir, { recursive: true });
   }
 
-  const releaseUrl = `https://github.com/${REPO}/releases/latest/download/${binaryName}`;
-
   console.log(
-    `==> Installing CEE native binary for ${process.platform}-${process.arch}...`,
+    `==> Configuring CEE native binary for ${process.platform}-${process.arch}...`,
   );
 
+  // 1. Option 3: Check if precompiled binary is bundled in the npm package
+  const bundledCandidates = [
+    path.join(binDir, "dist", binaryName),
+    path.join(binDir, binaryName),
+  ];
+  for (const candidate of bundledCandidates) {
+    if (fs.existsSync(candidate)) {
+      console.log(
+        `==> Found bundled precompiled binary: ${path.basename(candidate)}`,
+      );
+      if (candidate !== targetBin) {
+        fs.copyFileSync(candidate, targetBin);
+      }
+      fs.chmodSync(targetBin, 0o755);
+      console.log(
+        `✓ Successfully configured bundled CEE binary at ${targetBin}`,
+      );
+      return;
+    }
+  }
+
+  // 2. Option 1: Download from CEE distribution server
+  const serverUrl = process.env.CEE_SERVER || DEFAULT_SERVER;
+  const downloadUrl = `${serverUrl}/download/${binaryName}`;
+
   try {
-    console.log(`==> Downloading prebuilt binary from GitHub Releases...`);
-    await downloadFile(releaseUrl, targetBin);
+    console.log(`==> Downloading prebuilt binary from ${downloadUrl}...`);
+    await downloadFile(downloadUrl, targetBin);
     fs.chmodSync(targetBin, 0o755);
     console.log(`✓ Successfully installed CEE binary to ${targetBin}`);
     return;
   } catch (err) {
-    console.log(`--> Prebuilt download not available (${err.message}).`);
+    console.log(`--> Server binary download failed (${err.message}).`);
   }
 
-  // Fallback: build from source if 'go' compiler is installed
+  // 3. Fallback: build from source if 'go' compiler is installed
   try {
     const hasGo = execSync("go version", { stdio: "pipe" }).toString();
     if (hasGo) {
@@ -105,11 +130,9 @@ async function main() {
   }
 
   console.error(
-    `ERROR: Could not download prebuilt binary or build from source.`,
+    `ERROR: Could not find bundled binary, download prebuilt binary, or compile from source.`,
   );
-  console.error(
-    `Please visit https://github.com/${REPO}/releases to download manually.`,
-  );
+  console.error(`Distribution server: ${downloadUrl}`);
   process.exit(1);
 }
 

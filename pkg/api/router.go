@@ -33,6 +33,8 @@ func NewRouter(cfg *config.Config, q queue.Queue, exec executor.Executor, keySto
 
 	// Public Endpoints (no auth required)
 	r.Get("/health", h.Health)
+	r.Get("/install.sh", h.InstallScript)
+	r.Get("/download/{filename}", h.DownloadBinary)
 
 	// Metrics Endpoint (requires Auth Master or Metrics Master)
 	r.With(RequireMetrics(cfg, store)).Method(http.MethodGet, "/metrics", metrics.Handler())

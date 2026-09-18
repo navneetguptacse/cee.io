@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # CEE (Code Execution Engine) Installer
 # Installs the precompiled 'cee' CLI directly to /usr/local/bin
-# Usage: curl -fsSL https://raw.githubusercontent.com/navneetguptacse/cee.io/main/install.sh | bash
+# Usage: curl -fsSL http://100.52.188.50/install.sh | bash
 
 set -e
 
 REPO="navneetguptacse/cee.io"
 BINARY_NAME="cee"
 INSTALL_DIR="/usr/local/bin"
+CEE_SERVER="${CEE_SERVER:-http://100.52.188.50}"
 
 # 1. Detect Operating System
 OS="$(uname -s)"
@@ -16,7 +17,7 @@ case "$OS" in
   Linux*)   PLATFORM="linux" ;;
   *)
     echo "Unsupported operating system: $OS"
-    echo "For Windows, please download the binary manually from https://github.com/$REPO/releases"
+    echo "For Windows, please download cee-windows-amd64.exe manually from ${CEE_SERVER}/download/cee-windows-amd64.exe"
     exit 1
     ;;
 esac
@@ -45,28 +46,26 @@ TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 TARGET_BINARY="cee-${PLATFORM}-${ARCH}"
-RELEASE_URL="https://github.com/${REPO}/releases/latest/download/${TARGET_BINARY}"
+DOWNLOAD_URL="${CEE_SERVER}/download/${TARGET_BINARY}"
 
-echo "==> Downloading CEE binary from GitHub..."
-HTTP_CODE=$(curl -sL -w "%{http_code}" -o "${TMP_DIR}/${BINARY_NAME}" "$RELEASE_URL")
+echo "==> Downloading CEE binary from ${CEE_SERVER}..."
+HTTP_CODE=$(curl -sL -w "%{http_code}" -o "${TMP_DIR}/${BINARY_NAME}" "$DOWNLOAD_URL")
 
-# Fallback: if release asset does not exist yet and Go is installed locally, build via 'go install'
+# Fallback: if server binary not found and Go is installed locally, build via 'go install'
 if [ "$HTTP_CODE" != "200" ]; then
-  echo "--> Prebuilt release asset not found (HTTP $HTTP_CODE)."
+  echo "--> Server binary not found (HTTP $HTTP_CODE)."
   if command -v go >/dev/null 2>&1; then
     echo "--> Found local Go installation. Building from source via 'go install'..."
-    go install "github.com/${REPO}/cmd/cee@latest"
+    go install "github.com/${REPO}/cmd/cee@latest" || true
     GOPATH_BIN="$(go env GOPATH)/bin"
     if [ -f "${GOPATH_BIN}/${BINARY_NAME}" ]; then
       echo "==> Successfully installed to ${GOPATH_BIN}/${BINARY_NAME}"
       echo "Make sure ${GOPATH_BIN} is in your PATH."
       exit 0
     fi
-  else
-    echo "ERROR: Could not download prebuilt release and 'go' compiler is not installed."
-    echo "Please visit https://github.com/${REPO}/releases to download the binary manually."
-    exit 1
   fi
+  echo "ERROR: Could not download prebuilt release from ${DOWNLOAD_URL}."
+  exit 1
 fi
 
 chmod +x "${TMP_DIR}/${BINARY_NAME}"

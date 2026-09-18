@@ -470,4 +470,3 @@ func submitCodeToRemote(apiURL, authToken, code string, lang *languages.Language
 	fmt.Println("──────────────────────────────────────────────────────────")
 	return nil
 }
-

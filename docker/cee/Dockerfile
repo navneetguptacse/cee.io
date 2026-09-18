@@ -7,6 +7,12 @@ RUN go mod download
 
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/cee ./cmd/cee
+RUN mkdir -p /dist && \
+    GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o /dist/cee-darwin-arm64 ./cmd/cee && \
+    GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o /dist/cee-darwin-amd64 ./cmd/cee && \
+    GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /dist/cee-linux-amd64 ./cmd/cee && \
+    GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o /dist/cee-linux-arm64 ./cmd/cee && \
+    GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o /dist/cee-windows-amd64.exe ./cmd/cee
 
 FROM ubuntu:22.04
 
@@ -25,6 +31,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=builder /usr/local/go /usr/local/go
 COPY --from=builder /bin/cee /usr/local/bin/cee
+COPY --from=builder /dist /app/bin/dist
+COPY --from=builder /src/install.sh /app/install.sh
+RUN chmod -R 755 /app/bin/dist /app/install.sh
 
 ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOCACHE=/tmp/go-cache

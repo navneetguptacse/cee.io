@@ -330,3 +330,61 @@ func TestAPI_BatchValidationAtomic(t *testing.T) {
 		t.Fatalf("expected 422 Unprocessable Entity, got %d", rec.Code)
 	}
 }
+
+func TestAPI_InstallScript(t *testing.T) {
+	handler, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	req := httptest.NewRequest(http.MethodGet, "/install.sh", nil)
+	req.Host = "deploy.cee.io:8080"
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "deploy.cee.io:8080") {
+		t.Errorf("expected script to dynamically include host header, got %s", body)
+	}
+	if !strings.Contains(body, "cee-") {
+		t.Errorf("expected script to mention binary name, got %s", body)
+	}
+}
+
+func TestAPI_DownloadBinary(t *testing.T) {
+	handler, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// 1. Existing distribution binary
+	req := httptest.NewRequest(http.MethodGet, "/download/cee-darwin-arm64", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for cee-darwin-arm64, got %d", rec.Code)
+	}
+	if rec.Header().Get("Content-Type") != "application/octet-stream" {
+		t.Errorf("expected octet-stream, got %s", rec.Header().Get("Content-Type"))
+	}
+
+	// 2. Non-existent binary
+	req404 := httptest.NewRequest(http.MethodGet, "/download/nonexistent-binary-foo", nil)
+	rec404 := httptest.NewRecorder()
+	handler.ServeHTTP(rec404, req404)
+
+	if rec404.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for missing binary, got %d", rec404.Code)
+	}
+
+	// 3. Traversal protection
+	reqTrav := httptest.NewRequest(http.MethodGet, "/download/../../etc/passwd", nil)
+	recTrav := httptest.NewRecorder()
+	handler.ServeHTTP(recTrav, reqTrav)
+
+	if recTrav.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 or blocked for traversal, got %d", recTrav.Code)
+	}
+}

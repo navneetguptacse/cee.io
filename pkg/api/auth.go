@@ -202,4 +202,3 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		"message": "Successfully logged out!",
 	})
 }
-

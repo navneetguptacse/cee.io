@@ -102,4 +102,3 @@ func newSelfTestCmd() *cobra.Command {
 		},
 	}
 }
-

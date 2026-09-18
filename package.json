@@ -9,6 +9,10 @@
   "scripts": {
     "postinstall": "node scripts/install.js"
   },
+  "files": [
+    "scripts",
+    "bin"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/navneetguptacse/cee.io.git"

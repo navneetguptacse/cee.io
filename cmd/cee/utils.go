@@ -81,4 +81,3 @@ func looksLikeFilePath(s string) bool {
 	}
 	return filepath.Ext(s) != ""
 }
-

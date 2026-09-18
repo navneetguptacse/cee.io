@@ -362,4 +362,3 @@ func executeWhoami(apiURL, token string) error {
 
 	return nil
 }
-

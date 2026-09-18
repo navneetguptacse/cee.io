@@ -68,11 +68,15 @@ jobs:
     steps:
       - name: Execute Remote Deployment over SSH
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER || 'ubuntu' }}
           key: ${{ secrets.EC2_SSH_KEY }}
           port: ${{ secrets.EC2_PORT || 22 }}
+          envs: GH_TOKEN,REPO
           script_stop: true
           script: |
             set -e
@@ -83,8 +87,13 @@ jobs:
             cd "$APP_DIR"
 
             echo "Step 2: Fetching and checking out latest main branch"
-            git fetch origin main
-            git reset --hard origin/main
+            if [ -n "$GH_TOKEN" ]; then
+              git fetch "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" main
+              git reset --hard FETCH_HEAD
+            else
+              git fetch origin main
+              git reset --hard origin/main
+            fi
 
             echo "Step 3: Rebuilding & restarting production containers"
             docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
@@ -98,5 +107,6 @@ jobs:
             echo "Step 6: Verifying container status & health"
             docker compose -f docker-compose.prod.yml ps
             curl -s -f http://localhost/health || (echo "ERROR: Health check failed!" && exit 1)
+            curl -s -f http://localhost/install.sh > /dev/null || (echo "ERROR: /install.sh check failed!" && exit 1)
 
             echo "Deployment Successful!"

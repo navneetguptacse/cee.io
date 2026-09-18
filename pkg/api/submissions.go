@@ -327,4 +327,3 @@ func parseFields(fieldsStr string) map[string]bool {
 	}
 	return m
 }
-

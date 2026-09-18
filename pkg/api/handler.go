@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"cee.io/pkg/auth"
@@ -208,3 +210,122 @@ func respondJSON(w http.ResponseWriter, code int, payload any) {
 func respondError(w http.ResponseWriter, code int, errType string, message string) {
 	respondJSON(w, code, ErrorResponse{Error: errType, Message: message})
 }
+
+// GET /install.sh
+func (h *Handler) InstallScript(w http.ResponseWriter, r *http.Request) {
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	host := r.Host
+	if xfh := r.Header.Get("X-Forwarded-Host"); xfh != "" {
+		host = xfh
+	}
+	serverURL := fmt.Sprintf("%s://%s", scheme, host)
+
+	scriptContent, err := os.ReadFile("install.sh")
+	if err != nil {
+		for _, p := range []string{"./install.sh", "../install.sh", "../../install.sh"} {
+			if data, readErr := os.ReadFile(p); readErr == nil {
+				scriptContent = data
+				err = nil
+				break
+			}
+		}
+	}
+
+	var contentStr string
+	if err == nil {
+		contentStr = string(scriptContent)
+	} else {
+		contentStr = defaultInstallScript
+	}
+
+	contentStr = strings.Replace(contentStr, "http://100.52.188.50", serverURL, -1)
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(contentStr))
+}
+
+// GET /download/{filename}
+func (h *Handler) DownloadBinary(w http.ResponseWriter, r *http.Request) {
+	filename := filepath.Base(filepath.Clean(chi.URLParam(r, "filename")))
+	if filename == "." || filename == "/" || filename == "" {
+		respondError(w, http.StatusBadRequest, "Bad Request", "Invalid filename")
+		return
+	}
+
+	distDirs := []string{
+		"./bin/dist",
+		"bin/dist",
+		"../bin/dist",
+		"../../bin/dist",
+		"./bin",
+		"bin",
+		"../bin",
+	}
+	if customDir := os.Getenv("CEE_DIST_DIR"); customDir != "" {
+		distDirs = append([]string{customDir}, distDirs...)
+	}
+
+	var targetPath string
+	for _, dir := range distDirs {
+		candidate := filepath.Join(dir, filename)
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			targetPath = candidate
+			break
+		}
+	}
+
+	if targetPath == "" {
+		respondError(w, http.StatusNotFound, "Not Found", fmt.Sprintf("Binary %s not found", filename))
+		return
+	}
+
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	http.ServeFile(w, r, targetPath)
+}
+
+const defaultInstallScript = `#!/usr/bin/env bash
+set -e
+CEE_SERVER="${CEE_SERVER:-http://100.52.188.50}"
+INSTALL_DIR="/usr/local/bin"
+
+OS="$(uname -s)"
+case "$OS" in
+  Darwin*) PLATFORM="darwin" ;;
+  Linux*)  PLATFORM="linux" ;;
+  *) echo "Unsupported OS: $OS"; exit 1 ;;
+esac
+
+ARCH="$(uname -m)"
+case "$ARCH" in
+  x86_64|amd64) ARCH="amd64" ;;
+  arm64|aarch64) ARCH="arm64" ;;
+  *) echo "Unsupported ARCH: $ARCH"; exit 1 ;;
+esac
+
+echo "==> Detected system: ${PLATFORM}-${ARCH}"
+TARGET_BINARY="cee-${PLATFORM}-${ARCH}"
+DOWNLOAD_URL="${CEE_SERVER}/download/${TARGET_BINARY}"
+
+if [ ! -d "$INSTALL_DIR" ] || [ ! -w "$INSTALL_DIR" ]; then
+  SUDO="sudo"
+else
+  SUDO=""
+fi
+
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+echo "==> Downloading CEE binary from ${DOWNLOAD_URL}..."
+curl -fsSL -o "${TMP_DIR}/cee" "${DOWNLOAD_URL}"
+chmod +x "${TMP_DIR}/cee"
+
+echo "==> Installing cee to ${INSTALL_DIR}..."
+$SUDO install -m 755 "${TMP_DIR}/cee" "${INSTALL_DIR}/cee"
+echo "==> Successfully installed CEE CLI to ${INSTALL_DIR}/cee!"
+"${INSTALL_DIR}/cee" --help || true
+`

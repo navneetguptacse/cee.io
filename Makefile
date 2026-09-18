@@ -9,8 +9,11 @@ GO          ?= go
 LDFLAGS     ?= -s -w
 PORT        ?= 3000
 INSTALL_DIR ?= /usr/local/bin
+EC2_HOST    ?= 100.52.188.50
+EC2_USER    ?= ubuntu
+EC2_DIR     ?= ~/cee.io
 
-.PHONY: all help build install clean test test-race fmt vet diag server worker docker-build docker-up docker-down docker-prod-up docker-prod-down
+.PHONY: all help build dist install deploy clean test test-race fmt vet diag server worker docker-build docker-up docker-down docker-prod-up docker-prod-down
 
 all: build
 
@@ -19,6 +22,7 @@ help:
 	@echo ""
 	@echo "Build & Installation:"
 	@echo "  make build             Compile the stripped static binary to $(BUILD_PATH)"
+	@echo "  make dist              Compile cross-platform binaries for distribution to $(BIN_DIR)/dist"
 	@echo "  make install           Install $(BINARY_NAME) binary to $(INSTALL_DIR)"
 	@echo "  make clean             Remove compiled binaries and temporary build files"
 	@echo ""
@@ -45,6 +49,16 @@ build:
 	@mkdir -p $(BIN_DIR)
 	$(GO) build -ldflags="$(LDFLAGS)" -o $(BUILD_PATH) $(MAIN_SRC)
 	@echo "Build completed: $(BUILD_PATH)"
+
+dist:
+	@mkdir -p $(BIN_DIR)/dist
+	GOOS=darwin GOARCH=arm64 $(GO) build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/dist/cee-darwin-arm64 $(MAIN_SRC)
+	GOOS=darwin GOARCH=amd64 $(GO) build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/dist/cee-darwin-amd64 $(MAIN_SRC)
+	GOOS=linux GOARCH=amd64 $(GO) build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/dist/cee-linux-amd64 $(MAIN_SRC)
+	GOOS=linux GOARCH=arm64 $(GO) build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/dist/cee-linux-arm64 $(MAIN_SRC)
+	GOOS=windows GOARCH=amd64 $(GO) build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/dist/cee-windows-amd64.exe $(MAIN_SRC)
+	@echo "Cross-platform binaries successfully created in $(BIN_DIR)/dist:"
+	@ls -lh $(BIN_DIR)/dist
 
 install: build
 	@echo "Installing $(BINARY_NAME) to $(INSTALL_DIR)..."
@@ -92,4 +106,14 @@ docker-prod-up:
 
 docker-prod-down:
 	docker compose -f docker-compose.prod.yml down
+
+deploy: dist
+	@echo "Deploying distribution binaries and CEE to $(EC2_USER)@$(EC2_HOST):$(EC2_DIR)..."
+	ssh $(EC2_USER)@$(EC2_HOST) "mkdir -p $(EC2_DIR)/bin/dist"
+	scp ./bin/dist/* $(EC2_USER)@$(EC2_HOST):$(EC2_DIR)/bin/dist/
+	scp ./install.sh $(EC2_USER)@$(EC2_HOST):$(EC2_DIR)/
+	ssh $(EC2_USER)@$(EC2_HOST) "cd $(EC2_DIR) && docker compose -f docker-compose.prod.yml up -d --build"
+	@echo "Deployment complete! Checking health and install.sh..."
+	@curl -fsSL http://$(EC2_HOST)/health || echo "Note: Check server health"
+	@curl -fsSL http://$(EC2_HOST)/install.sh > /dev/null && echo "✓ /install.sh verified on remote server"
 

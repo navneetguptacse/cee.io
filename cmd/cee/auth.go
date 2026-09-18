@@ -407,4 +407,3 @@ func showAuthStatus() error {
 	fmt.Println()
 	return nil
 }
-

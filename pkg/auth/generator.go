@@ -90,4 +90,3 @@ func GenerateKey(cType CredentialType, role Role, createdBy string, description 
 
 	return key, rawKey, nil
 }
-

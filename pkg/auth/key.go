@@ -29,22 +29,22 @@ const (
 
 // Standard permission constants
 const (
-	PermAPIAccess           = "api.access"
-	PermTokenGenerateGuest  = "token.generate.guest"
-	PermTokenGenerateMaster = "token.generate.master"
-	PermTokenGenerateMetrics= "token.generate.metrics"
-	PermTokenRevoke         = "token.revoke"
-	PermTokenList           = "token.list"
-	PermMetricsAccess       = "metrics.access"
+	PermAPIAccess            = "api.access"
+	PermTokenGenerateGuest   = "token.generate.guest"
+	PermTokenGenerateMaster  = "token.generate.master"
+	PermTokenGenerateMetrics = "token.generate.metrics"
+	PermTokenRevoke          = "token.revoke"
+	PermTokenList            = "token.list"
+	PermMetricsAccess        = "metrics.access"
 )
 
 var (
-	ErrInvalidTypeRole   = errors.New("invalid credential type and role combination: metrics credentials must be master-only")
-	ErrPermissionDenied  = errors.New("permission denied for requested credential operation")
-	ErrLastMaster        = errors.New("cannot revoke the last active master AUTH API key")
-	ErrKeyNotFound       = errors.New("api key not found")
-	ErrKeyRevoked        = errors.New("api key has been revoked")
-	ErrInvalidRequest    = errors.New("invalid request payload")
+	ErrInvalidTypeRole  = errors.New("invalid credential type and role combination: metrics credentials must be master-only")
+	ErrPermissionDenied = errors.New("permission denied for requested credential operation")
+	ErrLastMaster       = errors.New("cannot revoke the last active master AUTH API key")
+	ErrKeyNotFound      = errors.New("api key not found")
+	ErrKeyRevoked       = errors.New("api key has been revoked")
+	ErrInvalidRequest   = errors.New("invalid request payload")
 )
 
 // Key represents a stored API credential record.
@@ -169,4 +169,3 @@ func CanGenerate(caller *Key, targetType CredentialType, targetRole Role) bool {
 	// Metrics Master cannot generate any keys
 	return false
 }
-

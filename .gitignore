@@ -53,3 +53,5 @@ Thumbs.db
 # Log files
 *.log
 
+# Extra
+/[Tt][Ee][Ss][Tt].md

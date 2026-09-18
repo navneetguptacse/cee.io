@@ -72,16 +72,23 @@ Pick the mode that matches your setup:
 
 ### Mode 1 — Using the `cee` CLI
 
-CEE includes a built-in CLI that can run source code directly on your machine without running any background server or database:
+#### Install via Homebrew (macOS & Linux):
+```bash
+brew tap navneetguptacse/cee https://github.com/navneetguptacse/cee.io
+brew install navneetguptacse/cee/cee
+```
 
+#### Install via One-Liner Script:
+```bash
+curl -fsSL https://raw.githubusercontent.com/navneetguptacse/cee.io/main/install.sh | bash
+```
+
+#### Or Install from Source:
 ```bash
 cd cee.io
-
-# Build the CLI binary (using make or build.sh)
 make build
-
-# Optional: Install cee to /usr/local/bin
 sudo make install
+```
 
 # Run inline code directly
 ./bin/cee run -c "print(100 * 5)" -l py

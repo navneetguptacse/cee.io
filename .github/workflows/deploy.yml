@@ -1,0 +1,79 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  # ── 1. Quality & Test Gate (CI) ─────────────────────────────────────────────
+  test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          cache: true
+
+      - name: Verify Dependencies
+        run: go mod verify
+
+      - name: Run Code Analysis (go vet)
+        run: go vet ./...
+
+      - name: Run Test Suite (Race Detection)
+        run: go test -v -race ./tests/...
+
+      - name: Build Binary (CLI & Server)
+        run: go build -v -ldflags="-s -w" -o ./bin/cee ./cmd/cee
+
+  # ── 2. Continuous Deployment to EC2 (CD)
+  deploy:
+    name: Deploy to EC2 Production
+    needs: test
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute Remote Deployment over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER || 'ubuntu' }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -e
+            APP_DIR="${{ secrets.TARGET_DIR || '~/cee.io' }}"
+            eval APP_DIR=$APP_DIR
+
+            echo "Step 1: Navigating to repository at $APP_DIR"
+            cd "$APP_DIR"
+
+            echo "Step 2: Fetching and checking out latest main branch"
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "Step 3: Rebuilding & restarting production containers"
+            docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+
+            echo "Step 4: Cleaning up dangling images"
+            docker image prune -f
+
+            echo "Step 5: Waiting for services to initialize"
+            sleep 6
+
+            echo "Step 6: Verifying container status & health"
+            docker compose -f docker-compose.prod.yml ps
+            curl -s -f http://localhost/health || (echo "ERROR: Health check failed!" && exit 1)
+
+            echo "Deployment Successful!"

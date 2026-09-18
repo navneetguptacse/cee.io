@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -358,16 +360,28 @@ func TestAPI_DownloadBinary(t *testing.T) {
 	handler, cleanup := setupTestServer(t)
 	defer cleanup()
 
+	// Create a hermetic test binary inside t.TempDir()
+	tmpDir := t.TempDir()
+	testBinName := "cee-test-platform-arch"
+	testBinPath := filepath.Join(tmpDir, testBinName)
+	if err := os.WriteFile(testBinPath, []byte("binary-content"), 0o755); err != nil {
+		t.Fatalf("failed creating test binary: %v", err)
+	}
+	t.Setenv("CEE_DIST_DIR", tmpDir)
+
 	// 1. Existing distribution binary
-	req := httptest.NewRequest(http.MethodGet, "/download/cee-darwin-arm64", nil)
+	req := httptest.NewRequest(http.MethodGet, "/download/"+testBinName, nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 for cee-darwin-arm64, got %d", rec.Code)
+		t.Fatalf("expected 200 for %s, got %d", testBinName, rec.Code)
 	}
 	if rec.Header().Get("Content-Type") != "application/octet-stream" {
 		t.Errorf("expected octet-stream, got %s", rec.Header().Get("Content-Type"))
+	}
+	if rec.Body.String() != "binary-content" {
+		t.Errorf("expected 'binary-content', got %s", rec.Body.String())
 	}
 
 	// 2. Non-existent binary

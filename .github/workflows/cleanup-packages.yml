@@ -1,0 +1,23 @@
+name: Clean Old Package Versions
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 2 * * 0" # Runs automatically every Sunday
+
+jobs:
+  clean-packages:
+    name: Prune Untagged & Outdated Images
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - name: Delete untagged and older image versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: "cee.io"
+          package-type: "container"
+          min-versions-to-keep: 1
+          delete-only-untagged-versions: "false"
+          ignore-versions: "^(latest|v.*)$"

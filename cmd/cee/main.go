@@ -767,12 +767,6 @@ func loadClientConfig() ClientConfig {
 	if cfg.AuthToken == "" {
 		cfg.AuthToken = os.Getenv("CEE_TOKEN")
 	}
-	if cfg.AuthToken == "" {
-		cfg.AuthToken = os.Getenv("AUTH_TOKEN")
-	}
-	if cfg.MetricsToken == "" {
-		cfg.MetricsToken = os.Getenv("METRICS_TOKEN")
-	}
 
 	configFile := getClientConfigFile()
 	if data, err := os.ReadFile(configFile); err == nil {
@@ -1128,7 +1122,22 @@ func executeLogout() error {
 	if err := saveClientConfig(cfg); err != nil {
 		return err
 	}
-	fmt.Println("Successfully logged out. Local credentials cleared.")
+	fmt.Println("Successfully logged out. Local credentials cleared from ~/.cee/config.json.")
+
+	var envVars []string
+	for _, env := range []string{"CEE_AUTH_TOKEN", "CEE_TOKEN", "CEE_METRICS_TOKEN", "AUTH_TOKEN", "METRICS_TOKEN"} {
+		if os.Getenv(env) != "" {
+			envVars = append(envVars, env)
+		}
+	}
+	if len(envVars) > 0 {
+		fmt.Println("\n⚠️  Notice: Authentication environment variable(s) detected in your current shell:")
+		for _, v := range envVars {
+			fmt.Printf("   export %s\n", v)
+		}
+		fmt.Println("To completely remove them from your shell session, run:")
+		fmt.Printf("   unset %s\n", strings.Join(envVars, " "))
+	}
 	return nil
 }
 
@@ -1289,14 +1298,18 @@ func showAuthStatus() error {
 	if serverOnline && capInfo.Role != "" {
 		role = string(capInfo.Role)
 	}
-	if role == "" {
-		role = "master"
+	tokenSource := "Config file (~/.cee/config.json)"
+	if os.Getenv("CEE_AUTH_TOKEN") != "" {
+		tokenSource = "Environment variable (CEE_AUTH_TOKEN)"
+	} else if os.Getenv("CEE_TOKEN") != "" {
+		tokenSource = "Environment variable (CEE_TOKEN)"
 	}
 
 	fmt.Println("\nActive CEE Authentication Session:")
 	fmt.Println("──────────────────────────────────────────────────────────")
 	fmt.Printf("Server URL:      %s\n", cfg.APIURL)
 	fmt.Printf("Role:            %s\n", strings.ToUpper(role))
+	fmt.Printf("Auth Source:     %s\n", tokenSource)
 	if serverOnline {
 		fmt.Printf("Key ID:          %s\n", capInfo.KeyID)
 		fmt.Printf("Prefix:          %s\n", capInfo.Prefix)

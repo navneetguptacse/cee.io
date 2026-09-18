@@ -330,4 +330,3 @@ func TestAPI_BatchValidationAtomic(t *testing.T) {
 		t.Fatalf("expected 422 Unprocessable Entity, got %d", rec.Code)
 	}
 }
-

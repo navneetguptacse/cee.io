@@ -1023,7 +1023,7 @@ func newAuthCmd() *cobra.Command {
 		Use:     "metrics [api-key]",
 		Aliases: []string{"set-metrics"},
 		Short:   "Set or update Master METRICS API key (Master only)",
-		Args:  cobra.MaximumNArgs(1),
+		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg := loadClientConfig()
 			if strings.EqualFold(cfg.Role, "guest") {

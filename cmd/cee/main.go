@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -53,6 +54,7 @@ func init() {
 	rootCmd.AddCommand(newConnectCmd())
 	rootCmd.AddCommand(newConfigCmd())
 	rootCmd.AddCommand(newTokenCmd())
+	rootCmd.AddCommand(newAuthCmd())
 }
 
 func newServerCmd() *cobra.Command {
@@ -738,8 +740,10 @@ func looksLikeFilePath(s string) bool {
 
 // ClientConfig holds local CLI client preferences and server target.
 type ClientConfig struct {
-	APIURL    string `json:"api_url"`
-	AuthToken string `json:"auth_token,omitempty"`
+	APIURL       string `json:"api_url"`
+	AuthToken    string `json:"auth_token,omitempty"`
+	MetricsToken string `json:"metrics_token,omitempty"`
+	Role         string `json:"role,omitempty"`
 }
 
 func getClientConfigFile() string {
@@ -752,8 +756,21 @@ func getClientConfigFile() string {
 
 func loadClientConfig() ClientConfig {
 	cfg := ClientConfig{
-		APIURL:    os.Getenv("CEE_API_URL"),
-		AuthToken: os.Getenv("CEE_AUTH_TOKEN"),
+		APIURL:       os.Getenv("CEE_API_URL"),
+		AuthToken:    os.Getenv("CEE_AUTH_TOKEN"),
+		MetricsToken: os.Getenv("CEE_METRICS_TOKEN"),
+	}
+	if cfg.APIURL == "" {
+		cfg.APIURL = os.Getenv("CEE_URL")
+	}
+	if cfg.AuthToken == "" {
+		cfg.AuthToken = os.Getenv("CEE_TOKEN")
+	}
+	if cfg.AuthToken == "" {
+		cfg.AuthToken = os.Getenv("AUTH_TOKEN")
+	}
+	if cfg.MetricsToken == "" {
+		cfg.MetricsToken = os.Getenv("METRICS_TOKEN")
 	}
 
 	configFile := getClientConfigFile()
@@ -765,6 +782,12 @@ func loadClientConfig() ClientConfig {
 			}
 			if cfg.AuthToken == "" && fileCfg.AuthToken != "" {
 				cfg.AuthToken = fileCfg.AuthToken
+			}
+			if cfg.MetricsToken == "" && fileCfg.MetricsToken != "" {
+				cfg.MetricsToken = fileCfg.MetricsToken
+			}
+			if cfg.Role == "" && fileCfg.Role != "" {
+				cfg.Role = fileCfg.Role
 			}
 		}
 	}
@@ -812,10 +835,17 @@ func newConnectCmd() *cobra.Command {
 				return fmt.Errorf("server at %s returned status %d (expected 200)", rawURL, resp.StatusCode)
 			}
 
+			existingCfg := loadClientConfig()
 			cfg := ClientConfig{
-				APIURL:    rawURL,
-				AuthToken: token,
+				APIURL:       rawURL,
+				AuthToken:    token,
+				MetricsToken: existingCfg.MetricsToken,
+				Role:         existingCfg.Role,
 			}
+			if token == "" && existingCfg.AuthToken != "" {
+				cfg.AuthToken = existingCfg.AuthToken
+			}
+
 			if err := saveClientConfig(cfg); err != nil {
 				return fmt.Errorf("failed saving config: %w", err)
 			}
@@ -842,17 +872,32 @@ func newConfigCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			cfg := loadClientConfig()
 			fmt.Println("Active CEE CLI Configuration:")
-			fmt.Printf("  API URL:     %s\n", cfg.APIURL)
+			fmt.Printf("  API URL:       %s\n", cfg.APIURL)
 			if cfg.AuthToken != "" {
 				masked := cfg.AuthToken
-				if len(masked) > 6 {
-					masked = masked[:4] + "..."
+				if len(masked) > 8 {
+					masked = masked[:4] + "..." + masked[len(masked)-4:]
 				}
-				fmt.Printf("  Auth Token:  %s\n", masked)
+				roleStr := ""
+				if cfg.Role != "" {
+					roleStr = fmt.Sprintf(" (Role: %s)", strings.ToUpper(cfg.Role))
+				}
+				fmt.Printf("  Auth Token:    %s%s\n", masked, roleStr)
 			} else {
-				fmt.Println("  Auth Token:  (none)")
+				fmt.Println("  Auth Token:    (none)")
 			}
-			fmt.Printf("  Config File: %s\n", getClientConfigFile())
+
+			if cfg.MetricsToken != "" {
+				masked := cfg.MetricsToken
+				if len(masked) > 8 {
+					masked = masked[:4] + "..." + masked[len(masked)-4:]
+				}
+				fmt.Printf("  Metrics Token: %s\n", masked)
+			} else {
+				fmt.Println("  Metrics Token: (none - optional)")
+			}
+
+			fmt.Printf("  Config File:   %s\n", getClientConfigFile())
 		},
 	})
 
@@ -886,7 +931,356 @@ func newConfigCmd() *cobra.Command {
 		},
 	})
 
+	cmd.AddCommand(&cobra.Command{
+		Use:   "set-metrics <token>",
+		Short: "Set the remote CEE Metrics authentication token (Master only)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg := loadClientConfig()
+			if strings.EqualFold(cfg.Role, "guest") {
+				return fmt.Errorf("permission denied: METRICS token is master-only and cannot be configured for Guest credentials")
+			}
+			cfg.MetricsToken = args[0]
+			if err := saveClientConfig(cfg); err != nil {
+				return err
+			}
+			fmt.Println("Metrics authentication token updated successfully.")
+			return nil
+		},
+	})
+
 	return cmd
+}
+
+func newAuthCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "auth",
+		Short: "Authenticate and log in to CEE (guest or master)",
+		Long:  "Log in with an AUTH API key as Guest or Master. Master credentials can also configure an optional Metrics key.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return showAuthStatus()
+		},
+	}
+
+	var masterKeyFlag string
+	var masterMetricsFlag string
+	var masterUrlFlag string
+
+	masterCmd := &cobra.Command{
+		Use:   "master [api-key]",
+		Short: "Log in with a Master AUTH API key (full control, key generation, optional metrics)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			key := masterKeyFlag
+			if len(args) > 0 {
+				key = args[0]
+			}
+			if key == "" {
+				fmt.Print("Enter Master AUTH API Key: ")
+				reader := bufio.NewReader(os.Stdin)
+				input, _ := reader.ReadString('\n')
+				key = strings.TrimSpace(input)
+			}
+			if key == "" {
+				return fmt.Errorf("master API key is required")
+			}
+			return executeLogin("master", key, masterMetricsFlag, masterUrlFlag)
+		},
+	}
+	masterCmd.Flags().StringVarP(&masterKeyFlag, "key", "k", "", "Master AUTH API key")
+	masterCmd.Flags().StringVarP(&masterMetricsFlag, "metrics", "m", "", "Optional Master METRICS API key")
+	masterCmd.Flags().StringVarP(&masterUrlFlag, "url", "u", "", "CEE server URL")
+
+	var guestKeyFlag string
+	var guestUrlFlag string
+
+	guestCmd := &cobra.Command{
+		Use:   "guest [api-key]",
+		Short: "Log in with a Guest AUTH API key (normal execution & guest delegation)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			key := guestKeyFlag
+			if len(args) > 0 {
+				key = args[0]
+			}
+			if key == "" {
+				fmt.Print("Enter Guest AUTH API Key: ")
+				reader := bufio.NewReader(os.Stdin)
+				input, _ := reader.ReadString('\n')
+				key = strings.TrimSpace(input)
+			}
+			if key == "" {
+				return fmt.Errorf("guest API key is required")
+			}
+			return executeLogin("guest", key, "", guestUrlFlag)
+		},
+	}
+	guestCmd.Flags().StringVarP(&guestKeyFlag, "key", "k", "", "Guest AUTH API key")
+	guestCmd.Flags().StringVarP(&guestUrlFlag, "url", "u", "", "CEE server URL")
+
+	var metricsUrlFlag string
+	metricsCmd := &cobra.Command{
+		Use:     "metrics [api-key]",
+		Aliases: []string{"set-metrics"},
+		Short:   "Set or update Master METRICS API key (Master only)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg := loadClientConfig()
+			if strings.EqualFold(cfg.Role, "guest") {
+				return fmt.Errorf("permission denied: METRICS API key is restricted to Master role. Current login is GUEST")
+			}
+
+			key := ""
+			if len(args) > 0 {
+				key = args[0]
+			} else {
+				fmt.Print("Enter Master METRICS API Key: ")
+				reader := bufio.NewReader(os.Stdin)
+				input, _ := reader.ReadString('\n')
+				key = strings.TrimSpace(input)
+			}
+			if key == "" {
+				return fmt.Errorf("metrics API key is required")
+			}
+
+			targetURL := metricsUrlFlag
+			if targetURL == "" {
+				targetURL = cfg.APIURL
+			}
+			targetURL = strings.TrimRight(targetURL, "/")
+
+			// Test metrics access against the server
+			req, _ := http.NewRequest(http.MethodGet, targetURL+"/metrics", nil)
+			req.Header.Set("X-Auth-Token", key)
+			client := &http.Client{Timeout: 5 * time.Second}
+			resp, err := client.Do(req)
+			if err == nil {
+				defer resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					fmt.Println("✓ Verified METRICS API key with server.")
+				} else if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+					return fmt.Errorf("server rejected METRICS key (HTTP %d): Invalid or unauthorized metrics token", resp.StatusCode)
+				}
+			}
+
+			cfg.MetricsToken = key
+			if err := saveClientConfig(cfg); err != nil {
+				return err
+			}
+
+			fmt.Println("✓ Metrics API Key configured successfully!")
+			fmt.Printf("Prometheus Endpoint: %s/metrics\n", targetURL)
+			return nil
+		},
+	}
+	metricsCmd.Flags().StringVarP(&metricsUrlFlag, "url", "u", "", "CEE server URL")
+
+	statusCmd := &cobra.Command{
+		Use:     "status",
+		Aliases: []string{"whoami"},
+		Short:   "Display active authentication status and role permissions",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return showAuthStatus()
+		},
+	}
+
+	logoutCmd := &cobra.Command{
+		Use:   "logout",
+		Short: "Clear active authentication credentials from local config",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg := loadClientConfig()
+			cfg.AuthToken = ""
+			cfg.MetricsToken = ""
+			cfg.Role = ""
+			if err := saveClientConfig(cfg); err != nil {
+				return err
+			}
+			fmt.Println("Successfully logged out. Local credentials cleared.")
+			return nil
+		},
+	}
+
+	cmd.AddCommand(masterCmd)
+	cmd.AddCommand(guestCmd)
+	cmd.AddCommand(metricsCmd)
+	cmd.AddCommand(statusCmd)
+	cmd.AddCommand(logoutCmd)
+
+	return cmd
+}
+
+func executeLogin(expectedRole, key, metricsKey, urlFlag string) error {
+	cfg := loadClientConfig()
+	targetURL := urlFlag
+	if targetURL == "" {
+		targetURL = cfg.APIURL
+	}
+	if targetURL == "" {
+		targetURL = "http://localhost:3000"
+	}
+	targetURL = strings.TrimRight(targetURL, "/")
+
+	// Validate against server /api/capabilities
+	client := &http.Client{Timeout: 8 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, targetURL+"/api/capabilities", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Auth-Token", key)
+
+	resp, err := client.Do(req)
+	var capInfo auth.CapabilityInfo
+	serverVerified := false
+
+	if err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			b, _ := io.ReadAll(resp.Body)
+			if err := json.Unmarshal(b, &capInfo); err == nil {
+				serverVerified = true
+			}
+		} else if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return fmt.Errorf("authentication failed (HTTP %d): Invalid or revoked API key", resp.StatusCode)
+		}
+	}
+
+	actualRole := expectedRole
+	if serverVerified {
+		actualRole = strings.ToLower(string(capInfo.Role))
+		if expectedRole == "master" && actualRole == "guest" {
+			return fmt.Errorf("permission mismatch: Provided key is a GUEST credential, not a MASTER key.\nRun 'cee auth guest <key>' to log in as Guest")
+		}
+	}
+
+	cfg.APIURL = targetURL
+	cfg.AuthToken = key
+	cfg.Role = actualRole
+
+	if metricsKey != "" {
+		if actualRole == "guest" {
+			return fmt.Errorf("invalid option: METRICS API keys cannot be configured for Guest credentials (Master only)")
+		}
+		cfg.MetricsToken = metricsKey
+	} else if actualRole == "guest" {
+		cfg.MetricsToken = "" // Clear any existing metrics token when logging in as guest
+	}
+
+	if err := saveClientConfig(cfg); err != nil {
+		return fmt.Errorf("failed saving config: %w", err)
+	}
+
+	fmt.Println()
+	fmt.Printf("✓ Successfully logged in as %s!\n", strings.ToUpper(actualRole))
+	fmt.Println("──────────────────────────────────────────────────────────")
+	fmt.Printf("Server URL:      %s\n", targetURL)
+	if serverVerified {
+		fmt.Printf("Key ID:          %s\n", capInfo.KeyID)
+		fmt.Printf("Prefix:          %s\n", capInfo.Prefix)
+		fmt.Println("Server Status:   Verified online & active")
+	} else {
+		masked := key
+		if len(masked) > 12 {
+			masked = masked[:6] + "..." + masked[len(masked)-4:]
+		}
+		fmt.Printf("API Key:         %s\n", masked)
+		fmt.Println("Server Status:   Saved locally (server was unreachable)")
+	}
+	fmt.Println("──────────────────────────────────────────────────────────")
+	fmt.Println("Role Permissions:")
+	if actualRole == "master" {
+		fmt.Println("  [ALLOWED] Normal API Execution (Run, Submit, Languages)")
+		fmt.Println("  [ALLOWED] Generate Guest AUTH Keys")
+		fmt.Println("  [ALLOWED] Generate Master AUTH Keys")
+		fmt.Println("  [ALLOWED] Generate Metrics Keys")
+		fmt.Println("  [ALLOWED] Revoke & Manage All Keys")
+		if cfg.MetricsToken != "" {
+			fmt.Println("  [ALLOWED] Metrics Access (Configured via METRICS key)")
+		} else {
+			fmt.Println("  [OPTIONAL] Metrics Access: Not configured (use 'cee auth metrics <key>')")
+		}
+	} else {
+		fmt.Println("  [ALLOWED] Normal API Execution (Run, Submit, Languages)")
+		fmt.Println("  [ALLOWED] Generate Guest AUTH Keys (Delegation)")
+		fmt.Println("  [DENIED]  Generate Master Keys")
+		fmt.Println("  [DENIED]  Generate Metrics Keys")
+		fmt.Println("  [DENIED]  Revoke Keys")
+		fmt.Println("  [DENIED]  Metrics API Access (Master only)")
+	}
+	fmt.Println("──────────────────────────────────────────────────────────")
+	fmt.Printf("Configuration saved to: %s\n\n", getClientConfigFile())
+
+	return nil
+}
+
+func showAuthStatus() error {
+	cfg := loadClientConfig()
+	if cfg.AuthToken == "" {
+		fmt.Println("\nNot currently logged in.")
+		fmt.Println("To authenticate:")
+		fmt.Println("  cee auth master <api-key> [-m <metrics-key>]")
+		fmt.Println("  cee auth guest <api-key>")
+		fmt.Println()
+		return nil
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	req, _ := http.NewRequest(http.MethodGet, cfg.APIURL+"/api/capabilities", nil)
+	req.Header.Set("X-Auth-Token", cfg.AuthToken)
+
+	resp, err := client.Do(req)
+	var capInfo auth.CapabilityInfo
+	serverOnline := false
+	if err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			b, _ := io.ReadAll(resp.Body)
+			if err := json.Unmarshal(b, &capInfo); err == nil {
+				serverOnline = true
+			}
+		}
+	}
+
+	role := cfg.Role
+	if serverOnline && capInfo.Role != "" {
+		role = string(capInfo.Role)
+	}
+	if role == "" {
+		role = "master"
+	}
+
+	fmt.Println("\nActive CEE Authentication Session:")
+	fmt.Println("──────────────────────────────────────────────────────────")
+	fmt.Printf("Server URL:      %s\n", cfg.APIURL)
+	fmt.Printf("Role:            %s\n", strings.ToUpper(role))
+	if serverOnline {
+		fmt.Printf("Key ID:          %s\n", capInfo.KeyID)
+		fmt.Printf("Prefix:          %s\n", capInfo.Prefix)
+		fmt.Println("Server Status:   Online & Active")
+	} else {
+		masked := cfg.AuthToken
+		if len(masked) > 8 {
+			masked = masked[:4] + "..." + masked[len(masked)-4:]
+		}
+		fmt.Printf("Token:           %s\n", masked)
+		fmt.Println("Server Status:   Unreachable / Offline")
+	}
+
+	if strings.EqualFold(role, "master") {
+		if cfg.MetricsToken != "" {
+			maskedM := cfg.MetricsToken
+			if len(maskedM) > 8 {
+				maskedM = maskedM[:4] + "..." + maskedM[len(maskedM)-4:]
+			}
+			fmt.Printf("Metrics Token:   %s (Configured)\n", maskedM)
+		} else {
+			fmt.Println("Metrics Token:   Not configured (optional - use 'cee auth metrics <key>')")
+		}
+	} else {
+		fmt.Println("Metrics Token:   N/A (Metrics restricted to Master role)")
+	}
+	fmt.Println("──────────────────────────────────────────────────────────")
+	fmt.Println()
+	return nil
 }
 
 func submitCodeToRemote(apiURL, authToken, code string, lang *languages.Language, stdin, expectedOutput string, timeout float64) error {
@@ -1344,7 +1738,7 @@ func executeWhoami(apiURL, token string) error {
 		}
 	}
 
-	printPerm("Normal Application API Access (Run, Submit, Languages)", hasPerm(auth.PermAPIAccess))
+	printPerm("Application API Access (Run, Submit, Languages)", hasPerm(auth.PermAPIAccess))
 	printPerm("Generate Guest AUTH Keys", hasPerm(auth.PermTokenGenerateGuest))
 	printPerm("Generate Master AUTH Keys", hasPerm(auth.PermTokenGenerateMaster))
 	printPerm("Generate Metrics Keys", hasPerm(auth.PermTokenGenerateMetrics))

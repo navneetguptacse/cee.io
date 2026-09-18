@@ -1,9 +1,7 @@
-name: Clean Old Package Versions
+name: Clean Up Packages
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 2 * * 0" # Runs automatically every Sunday
 
 jobs:
   clean-packages:
@@ -13,11 +11,35 @@ jobs:
       packages: write
       contents: read
     steps:
-      - name: Delete untagged and older image versions
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: "cee.io"
-          package-type: "container"
-          min-versions-to-keep: 1
-          delete-only-untagged-versions: "false"
-          ignore-versions: "^(latest|v.*)$"
+      - name: Prune untagged and older image versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          PACKAGE: cee.io
+        run: |
+          set -e
+          echo "Listing package versions for $OWNER/$PACKAGE..."
+
+          VERSIONS_JSON=$(gh api --paginate "/user/packages/container/${PACKAGE}/versions" 2>/dev/null || \
+                          gh api --paginate "/users/${OWNER}/packages/container/${PACKAGE}/versions")
+
+          TO_DELETE=$(echo "$VERSIONS_JSON" | jq -r '.[] | select((.metadata.container.tags | length == 0) or (.metadata.container.tags | any(test("^(latest|v[0-9].*)")) | not)) | .id')
+          TO_DELETE=$(echo "$VERSIONS_JSON" | jq -r '.[] | select((((.metadata.container.tags // []) | length == 0) or ((.metadata.container.tags // []) | any(test("^(latest|v[0-9].*)")) | not))) | .id')
+
+          if [ -z "$TO_DELETE" ]; then
+            echo "No outdated versions to delete. Package is already clean!"
+            exit 0
+          fi
+
+          TOTAL=$(echo "$TO_DELETE" | wc -l | tr -d ' ')
+          echo "Found $TOTAL versions to delete. Starting cleanup..."
+
+          COUNT=0
+          for id in $TO_DELETE; do
+            COUNT=$((COUNT + 1))
+            echo "[$COUNT/$TOTAL] Deleting version ID: $id..."
+            gh api -X DELETE "/user/packages/container/${PACKAGE}/versions/$id" 2>/dev/null || \
+            gh api -X DELETE "/users/${OWNER}/packages/container/${PACKAGE}/versions/$id" || true
+          done
+
+          echo "Successfully cleaned up $COUNT outdated versions!"

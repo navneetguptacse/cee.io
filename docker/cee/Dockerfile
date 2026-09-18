@@ -1,4 +1,6 @@
-FROM golang:latest AS builder
+FROM --platform=$BUILDPLATFORM golang:latest AS builder
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /src
 
@@ -6,13 +8,13 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/cee ./cmd/cee
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -ldflags="-s -w" -o /bin/cee ./cmd/cee
 RUN mkdir -p /dist && \
-    GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o /dist/cee-darwin-arm64 ./cmd/cee && \
-    GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o /dist/cee-darwin-amd64 ./cmd/cee && \
-    GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /dist/cee-linux-amd64 ./cmd/cee && \
-    GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o /dist/cee-linux-arm64 ./cmd/cee && \
-    GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o /dist/cee-windows-amd64.exe ./cmd/cee
+    CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o /dist/cee-darwin-arm64 ./cmd/cee && \
+    CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o /dist/cee-darwin-amd64 ./cmd/cee && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /dist/cee-linux-amd64 ./cmd/cee && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o /dist/cee-linux-arm64 ./cmd/cee && \
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o /dist/cee-windows-amd64.exe ./cmd/cee
 
 FROM ubuntu:22.04
 

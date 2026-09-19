@@ -41,36 +41,20 @@ jobs:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ env.DOCKERHUB_TOKEN }}
 
-      - name: Configure image destinations
-        id: destinations
-        run: |
-          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          IMAGES="ghcr.io/${REPO_LOWER}"
-          if [ -n "$DOCKERHUB_TOKEN" ] && [ -n "$DOCKERHUB_USERNAME" ]; then
-            IMAGES="${IMAGES}
-          ${DOCKERHUB_USERNAME}/cee"
-          fi
-          echo "images<<EOF" >> $GITHUB_OUTPUT
-          echo "$IMAGES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
       - name: Set lowercase repository name
         id: repo
         run: echo "name=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
-      - name: Derive metadata
-        id: meta
       - name: Derive metadata for GHCR
         id: meta_ghcr
         uses: docker/metadata-action@v5
         with:
-          images: ${{ steps.destinations.outputs.images }}
           images: ghcr.io/${{ steps.repo.outputs.name }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=tag
             type=sha,format=short
 
-      - name: Build and push CEE image
       - name: Derive metadata for Docker Hub
         if: env.DOCKERHUB_TOKEN != '' && env.DOCKERHUB_USERNAME != ''
         id: meta_hub
@@ -90,8 +74,6 @@ jobs:
           file: docker/cee/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
           tags: ${{ steps.meta_ghcr.outputs.tags }}
           labels: ${{ steps.meta_ghcr.outputs.labels }}
           cache-from: type=gha,scope=cee
@@ -116,7 +98,6 @@ jobs:
       # (Optional) Synchronize README to Docker Hub overview.
       # Requires a Docker Hub PAT with 'Admin' permissions; if using Read & Write, set overview via web UI.
       - name: Update Docker Hub Description (Optional)
-        if: env.DOCKERHUB_TOKEN != ''
         if: env.DOCKERHUB_TOKEN != '' && steps.push_hub.outcome == 'success'
         continue-on-error: true
         uses: peter-evans/dockerhub-description@v4
@@ -129,11 +110,9 @@ jobs:
 
       - name: Summary
         run: |
-          echo "### Pushed CEE Docker Image" >> $GITHUB_STEP_SUMMARY
           echo "### CEE Docker Images Summary" >> $GITHUB_STEP_SUMMARY
           echo "#### GitHub Container Registry (GHCR)" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.meta_ghcr.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           if [ -n "$DOCKERHUB_TOKEN" ] && [ -n "$DOCKERHUB_USERNAME" ]; then

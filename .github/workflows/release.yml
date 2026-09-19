@@ -2,14 +2,16 @@ name: Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
   workflow_dispatch:
     inputs:
-      tag_name:
-        description: "Release tag (e.g. v1.0.0)"
+      tag_override:
+        description: "Optional manual tag override (leave blank to auto-detect from package.json)"
         required: false
-        default: "v1.0.0"
+        default: ""
 
 permissions:
   contents: write
@@ -68,7 +70,6 @@ jobs:
     name: Publish GitHub Release
     needs: build-release
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Check out repository
@@ -80,13 +81,27 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Determine Release Tag
+      - name: Determine Release Tag from package.json
         id: tag
         run: |
-          if [ -n "${{ inputs.tag_name }}" ]; then
-            TAG="${{ inputs.tag_name }}"
+          # 1. If explicit manual override tag is passed
+          if [ -n "${{ inputs.tag_override }}" ]; then
+            TAG="${{ inputs.tag_override }}"
+            [[ "$TAG" != v* ]] && TAG="v${TAG}"
+            echo "Using manual override tag: $TAG"
+          # 2. If a git tag was pushed directly
           elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             TAG="${{ github.ref_name }}"
+            echo "Using pushed git tag: $TAG"
+          # 3. Read version from package.json as the auto-detection source
+          elif [ -f package.json ]; then
+            PKG_VER=$(jq -r '.version // empty' package.json)
+            if [ -n "$PKG_VER" ]; then
+              TAG="v${PKG_VER}"
+              echo "Auto-detected version from package.json: $TAG"
+            else
+              TAG="v1.0.0"
+            fi
           else
             TAG="v1.0.0"
           fi
@@ -96,6 +111,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
+          name: "CEE ${{ steps.tag.outputs.tag }}"
           files: release-assets/*
           generate_release_notes: true
           make_latest: true

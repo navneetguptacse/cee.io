@@ -45,6 +45,12 @@ jobs:
         id: repo
         run: echo "name=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
+      - name: Extract project version
+        id: pkg_version
+        run: |
+          VERSION=$(jq -r '.version // "1.0.0"' package.json)
+          echo "version=v${VERSION}" >> $GITHUB_OUTPUT
+
       - name: Derive metadata for GHCR
         id: meta_ghcr
         uses: docker/metadata-action@v5
@@ -52,6 +58,7 @@ jobs:
           images: ghcr.io/${{ steps.repo.outputs.name }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.pkg_version.outputs.version }},enable={{is_default_branch}}
             type=ref,event=tag
             type=sha,format=short
 
@@ -63,6 +70,7 @@ jobs:
           images: ${{ env.DOCKERHUB_USERNAME }}/cee
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.pkg_version.outputs.version }},enable={{is_default_branch}}
             type=ref,event=tag
             type=sha,format=short
 

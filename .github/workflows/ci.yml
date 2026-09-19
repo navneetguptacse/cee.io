@@ -8,8 +8,88 @@ on:
   workflow_dispatch:
 
 jobs:
+  check-version:
+    name: Verify Version Bump
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Verify VERSION file exists
+        run: |
+          if [ ! -f VERSION ]; then
+            echo "::error::Root VERSION file is missing!"
+            exit 1
+          fi
+          CURRENT_VER=$(cat VERSION | tr -d '[:space:]')
+          if [ -z "$CURRENT_VER" ]; then
+            echo "::error::VERSION file is empty!"
+            exit 1
+          fi
+          if ! [[ "$CURRENT_VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::VERSION '$CURRENT_VER' is not valid semantic versioning (X.Y.Z)!"
+            exit 1
+          fi
+          echo "Current version in VERSION: $CURRENT_VER"
+
+      - name: Check for Code Changes and Validate Version Bump
+        run: |
+          # 1. Determine comparison target
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_REF="origin/${{ github.base_ref }}"
+            echo "Comparing HEAD against PR base: $BASE_REF"
+            CHANGED_FILES=$(git diff --name-only "$BASE_REF"...HEAD || true)
+            OLD_VER=$(git show "$BASE_REF:VERSION" 2>/dev/null | tr -d '[:space:]' || true)
+          else
+            BEFORE_SHA="${{ github.event.before }}"
+            if [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git rev-parse "$BEFORE_SHA" >/dev/null 2>&1; then
+              echo "Comparing push from $BEFORE_SHA to HEAD"
+              CHANGED_FILES=$(git diff --name-only "$BEFORE_SHA" HEAD || true)
+              OLD_VER=$(git show "$BEFORE_SHA:VERSION" 2>/dev/null | tr -d '[:space:]' || true)
+            elif git rev-parse HEAD~1 >/dev/null 2>&1; then
+              echo "Comparing HEAD against HEAD~1"
+              CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD || true)
+              OLD_VER=$(git show HEAD~1:VERSION 2>/dev/null | tr -d '[:space:]' || true)
+            else
+              echo "Initial commit or shallow history. Allowing."
+              CHANGED_FILES=""
+              OLD_VER=""
+            fi
+          fi
+
+          echo "Changed files in this push/PR:"
+          echo "$CHANGED_FILES"
+
+          # 2. Check if VERSION was changed
+          CURRENT_VER=$(cat VERSION | tr -d '[:space:]')
+          if echo "$CHANGED_FILES" | grep -qx "VERSION"; then
+            if [ -n "$OLD_VER" ] && [ "$CURRENT_VER" = "$OLD_VER" ]; then
+              echo "::error::VERSION file was modified, but the version value was not bumped ($CURRENT_VER == $OLD_VER)!"
+              exit 1
+            fi
+            echo "[OK] VERSION was successfully updated: ${OLD_VER:-none} -> ${CURRENT_VER}"
+            exit 0
+          fi
+
+          # 3. If VERSION was NOT changed, check if any code files were touched
+          CODE_CHANGES=$(echo "$CHANGED_FILES" | grep -v -E '^(\.github/.*|\.gitignore|\.dockerignore|LICENSE|.*\.md|docs/.*)$' || true)
+
+          if [ -n "$CODE_CHANGES" ]; then
+            echo "::error::Code changes were detected, but VERSION was not bumped!"
+            echo "Modified code files:"
+            echo "$CODE_CHANGES"
+            echo ""
+            echo "Please bump the version in the VERSION file (e.g. 1.0.1) before pushing code changes."
+            exit 1
+          else
+            echo "[Notice] No code changes detected (only documentation or metadata modified). Skipping VERSION bump check."
+          fi
+
   test:
     name: Test and Build
+    needs: check-version
     runs-on: ubuntu-latest
 
     steps:

@@ -2,6 +2,8 @@
 
 **A high-performance, Judge0-compatible code execution engine and CLI built in Go.**
 
+[![Build & Test](https://img.shields.io/github/actions/workflow/status/navneetguptacse/cee.io/ci.yml?branch=main&label=build%20%26%20test)](https://github.com/navneetguptacse/cee.io/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/badge/release-v1.0.0-blue.svg)](https://github.com/navneetguptacse/cee.io/releases)
 [![Docker Image](https://img.shields.io/badge/docker-navneetguptacse%2Fcee-blue.svg?logo=docker&logoColor=white)](https://hub.docker.com/r/navneetguptacse/cee)
 [![GHCR](https://img.shields.io/badge/ghcr.io-navneetguptacse%2Fcee.io-blue.svg?logo=github&logoColor=white)](https://github.com/navneetguptacse/cee.io/pkgs/container/cee.io)
 [![Go Version](https://img.shields.io/badge/go-1.22+-00ADD8?logo=go&logoColor=white)](https://golang.org)
@@ -9,8 +11,10 @@
 [![API: Judge0 Compatible](https://img.shields.io/badge/API-Judge0%20Compatible-blue.svg)](https://judge0.com)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-lightgrey.svg)]()
 [![User Guide](https://img.shields.io/badge/guide-step--by--step-orange.svg)](GUIDE.md)
+[![Contributing](https://img.shields.io/badge/contributing-guidelines-purple.svg)](CONTRIBUTE.md)
+[![Test Suite](https://img.shields.io/badge/tests-test%20suite-success.svg)](TEST.md)
 
-> Looking for a beginner-friendly tutorial? Read the complete [User Guide (GUIDE.md)](GUIDE.md). For Docker Hub & GHCR container documentation, see [HUB.md](HUB.md). For end-to-end verification scenarios, see [TEST.md](TEST.md).
+> Looking for a beginner-friendly tutorial? Read the complete [User Guide (GUIDE.md)](GUIDE.md). For Docker Hub & GHCR container documentation, see [HUB.md](HUB.md). For end-to-end verification scenarios, see [TEST.md](TEST.md). For contribution and versioning rules, see [CONTRIBUTE.md](CONTRIBUTE.md).
 
 ---
 
@@ -147,7 +151,7 @@ cd cee.io
 curl http://localhost:3000/health
 
 # Submit Python code synchronously
-curl -X POST "http://localhost:3000/submissions?wait=true" \
+curl -X POST "http://localhost:3000/v1/submissions?wait=true" \
   -H "Content-Type: application/json" \
   -d '{"language_id": 71, "source_code": "print(21 * 2)"}'
 ```
@@ -173,7 +177,7 @@ curl http://localhost:3000/health
 The default development stack is configured with token `dev-token`:
 
 ```bash
-curl -X POST "http://localhost:3000/submissions?wait=true" \
+curl -X POST "http://localhost:3000/v1/submissions?wait=true" \
   -H "Content-Type: application/json" \
   -H "X-Auth-Token: dev-token" \
   -d '{"language_id": 71, "source_code": "print(\"Hello from CEE!\")"}'
@@ -208,7 +212,7 @@ Test from your local machine:
 ```bash
 curl http://<server-ip>/health
 
-curl -X POST "http://<server-ip>/submissions?wait=true" \
+curl -X POST "http://<server-ip>/v1/submissions?wait=true" \
   -H "Content-Type: application/json" \
   -H "X-Auth-Token: <your-token>" \
   -d '{"language_id": 71, "source_code": "print(10 + 20)"}'
@@ -353,14 +357,16 @@ cee status c506ea63-d1b1-4c2f-8e84-7aaf5a89d98d --url https://cee.io
 
 ### Submissions
 
-| Method   | Endpoint                        | Description                                        |
-| :------- | :------------------------------ | :------------------------------------------------- |
-| `POST`   | `/submissions`                  | Create asynchronous submission (returns `{token}`) |
-| `POST`   | `/submissions?wait=true`        | Create submission and wait for completed result    |
-| `GET`    | `/submissions/:token`           | Fetch execution result by token                    |
-| `DELETE` | `/submissions/:token`           | Delete submission from cache                       |
-| `POST`   | `/submissions/batch`            | Submit multiple submissions (up to 20)             |
-| `GET`    | `/submissions/batch?tokens=a,b` | Fetch results for multiple tokens                  |
+All submission endpoints are versioned under `/v1` (with root `/submissions` alias supported for backwards compatibility).
+
+| Method   | Endpoint                           | Description                                        |
+| :------- | :--------------------------------- | :------------------------------------------------- |
+| `POST`   | `/v1/submissions`                  | Create asynchronous submission (returns `{token}`) |
+| `POST`   | `/v1/submissions?wait=true`        | Create submission and wait for completed result    |
+| `GET`    | `/v1/submissions/:token`           | Fetch execution result by token                    |
+| `DELETE` | `/v1/submissions/:token`           | Delete submission from cache                       |
+| `POST`   | `/v1/submissions/batch`            | Submit multiple submissions (up to 20)             |
+| `GET`    | `/v1/submissions/batch?tokens=a,b` | Fetch results for multiple tokens                  |
 
 ### System & Discovery
 
@@ -495,6 +501,17 @@ All 16 test suites verify:
 - Base64 encoding/decoding
 - Expected output matching
 - Rate limiter enforcement
+
+---
+
+## Contributing
+
+We welcome contributions! Please read our [Contribution Guidelines (CONTRIBUTE.md)](CONTRIBUTE.md) for details on:
+
+- Automated versioning rules with the root `VERSION` file
+- Coding standards (including keeping all Go files under 500 lines)
+- Unit and race condition testing (`make test-race`)
+- Conventional commits and Pull Request workflow
 
 ---
 

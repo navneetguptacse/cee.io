@@ -8,13 +8,15 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -ldflags="-s -w" -o /bin/cee ./cmd/cee
-RUN mkdir -p /dist && \
-    CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o /dist/cee-darwin-arm64 ./cmd/cee && \
-    CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o /dist/cee-darwin-amd64 ./cmd/cee && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /dist/cee-linux-amd64 ./cmd/cee && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o /dist/cee-linux-arm64 ./cmd/cee && \
-    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o /dist/cee-windows-amd64.exe ./cmd/cee
+RUN RAW_VER=$(cat VERSION 2>/dev/null || echo "1.0.0") && \
+    VERSION="v$(echo ${RAW_VER} | sed 's/^v*//')" && \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -ldflags="-s -w -X main.Version=${VERSION} -X cee.io/pkg/api.Version=${VERSION}" -o /bin/cee ./cmd/cee && \
+    mkdir -p /dist && \
+    CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${VERSION} -X cee.io/pkg/api.Version=${VERSION}" -o /dist/cee-darwin-arm64 ./cmd/cee && \
+    CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${VERSION} -X cee.io/pkg/api.Version=${VERSION}" -o /dist/cee-darwin-amd64 ./cmd/cee && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${VERSION} -X cee.io/pkg/api.Version=${VERSION}" -o /dist/cee-linux-amd64 ./cmd/cee && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${VERSION} -X cee.io/pkg/api.Version=${VERSION}" -o /dist/cee-linux-arm64 ./cmd/cee && \
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${VERSION} -X cee.io/pkg/api.Version=${VERSION}" -o /dist/cee-windows-amd64.exe ./cmd/cee
 
 FROM ubuntu:22.04
 

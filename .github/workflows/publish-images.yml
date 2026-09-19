@@ -48,8 +48,13 @@ jobs:
       - name: Extract project version
         id: pkg_version
         run: |
-          VERSION=$(jq -r '.version // "1.0.0"' package.json)
-          echo "version=v${VERSION}" >> $GITHUB_OUTPUT
+          VERSION=$(cat VERSION 2>/dev/null | tr -d '[:space:]')
+          [ -z "$VERSION" ] && VERSION="1.0.0"
+          [[ "$VERSION" != v* ]] && VERSION="v${VERSION}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          # Standard Docker registry convention: clean semver without 'v' (e.g. 1.0.0 like mongo:7.0.0)
+          VERSION_CLEAN=$(echo "$VERSION" | sed 's/^v//')
+          echo "version=${VERSION_CLEAN}" >> $GITHUB_OUTPUT
 
       - name: Derive metadata for GHCR
         id: meta_ghcr
@@ -60,6 +65,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=${{ steps.pkg_version.outputs.version }},enable={{is_default_branch}}
             type=ref,event=tag
+            type=semver,pattern={{version}}
             type=sha,format=short
 
       - name: Derive metadata for Docker Hub
@@ -72,6 +78,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=${{ steps.pkg_version.outputs.version }},enable={{is_default_branch}}
             type=ref,event=tag
+            type=semver,pattern={{version}}
             type=sha,format=short
 
       - name: Build and push CEE image to GHCR
@@ -125,12 +132,12 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           if [ -n "$DOCKERHUB_TOKEN" ] && [ -n "$DOCKERHUB_USERNAME" ]; then
             if [ "${{ steps.push_hub.outcome }}" == "success" ]; then
-              echo "#### Docker Hub: Pushed Successfully ✅" >> $GITHUB_STEP_SUMMARY
+              echo "#### Docker Hub: Pushed Successfully" >> $GITHUB_STEP_SUMMARY
               echo '```' >> $GITHUB_STEP_SUMMARY
               echo "${{ steps.meta_hub.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
               echo '```' >> $GITHUB_STEP_SUMMARY
             else
-              echo "#### Docker Hub: Push Skipped / Authorization Failed ⚠️" >> $GITHUB_STEP_SUMMARY
+              echo "#### Docker Hub: Push Skipped / Authorization Failed" >> $GITHUB_STEP_SUMMARY
               echo "> **Advisory:** Docker Hub returned authorization failure (\`insufficient_scope\`)." >> $GITHUB_STEP_SUMMARY
               echo "> 1. Create the repository **\`cee\`** on Docker Hub: https://hub.docker.com/repository/create (visibility: Public)" >> $GITHUB_STEP_SUMMARY
               echo "> 2. Ensure your \`DOCKERHUB_TOKEN\` secret has **Read & Write** access permissions." >> $GITHUB_STEP_SUMMARY

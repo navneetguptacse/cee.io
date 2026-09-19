@@ -402,3 +402,38 @@ func TestAPI_DownloadBinary(t *testing.T) {
 		t.Fatalf("expected 404 or blocked for traversal, got %d", recTrav.Code)
 	}
 }
+
+func TestAPI_V1_Submissions(t *testing.T) {
+	handler, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	code := "print(40 + 2)"
+	subReq := api.SubmissionRequest{
+		SourceCode: &code,
+		LanguageID: 71,
+	}
+	body, _ := json.Marshal(subReq)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/submissions?wait=true", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp api.SubmissionResponse
+	_ = json.NewDecoder(rec.Body).Decode(&resp)
+
+	if resp.Token == "" {
+		t.Errorf("expected non-empty token")
+	}
+	if resp.Status.ID != 3 {
+		t.Errorf("expected Accepted (3), got %d (%s)", resp.Status.ID, resp.Status.Description)
+	}
+	if resp.Stdout == nil || !strings.Contains(*resp.Stdout, "42") {
+		t.Errorf("expected stdout to contain 42, got %v", resp.Stdout)
+	}
+}

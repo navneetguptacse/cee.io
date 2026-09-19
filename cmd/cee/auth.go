@@ -123,7 +123,7 @@ func newAuthCmd() *cobra.Command {
 			if err == nil {
 				defer resp.Body.Close()
 				if resp.StatusCode == http.StatusOK {
-					fmt.Println("✓ Verified METRICS API key with server.")
+					fmt.Println("[OK] Verified METRICS API key with server.")
 				} else if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
 					return fmt.Errorf("Invalid or unauthorized API key")
 				}
@@ -137,7 +137,7 @@ func newAuthCmd() *cobra.Command {
 				return err
 			}
 
-			fmt.Println("✓ Metrics API Key configured successfully!")
+			fmt.Println("[OK] Metrics API Key configured successfully!")
 			fmt.Printf("Prometheus Endpoint: %s/metrics\n", targetURL)
 			return nil
 		},
@@ -197,7 +197,7 @@ func executeLogout() error {
 		}
 	}
 	if len(envVars) > 0 {
-		fmt.Println("\n⚠️  Notice: Authentication environment variable(s) detected in your current shell:")
+		fmt.Println("\nNotice: Authentication environment variable(s) detected in your current shell:")
 		for _, v := range envVars {
 			fmt.Printf("   export %s\n", v)
 		}
@@ -277,7 +277,7 @@ func executeLogin(expectedRole, key, metricsKey, urlFlag string) error {
 		if respM, errM := client.Do(reqM); errM == nil {
 			defer respM.Body.Close()
 			if respM.StatusCode == http.StatusOK {
-				fmt.Println("✓ Verified METRICS API key with server.")
+				fmt.Println("[OK] Verified METRICS API key with server.")
 			} else if respM.StatusCode == http.StatusForbidden || respM.StatusCode == http.StatusUnauthorized {
 				return fmt.Errorf("Invalid or unauthorized API key")
 			}

@@ -4,14 +4,27 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
+
+var Version = "v1.0.0"
 
 var rootCmd = &cobra.Command{
 	Use:   "cee",
 	Short: "CEE — High-performance Code Execution Engine & CLI",
 	Long:  `CEE is an ultra-low latency, production-ready, Judge0-compatible code execution engine and CLI tool built in Go.`,
+}
+
+func newVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print version information",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println(Version)
+		},
+	}
 }
 
 func main() {
@@ -25,6 +38,11 @@ func main() {
 }
 
 func init() {
+	if !strings.HasPrefix(Version, "v") {
+		Version = "v" + Version
+	}
+	rootCmd.Version = Version
+	rootCmd.AddCommand(newVersionCmd())
 	rootCmd.AddCommand(newServerCmd())
 	rootCmd.AddCommand(newWorkerCmd())
 	rootCmd.AddCommand(newRunCmd())

@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_override:
-        description: "Optional manual tag override (leave blank to auto-detect from package.json)"
+        description: "Optional manual tag override (leave blank to auto-detect from VERSION)"
         required: false
         default: ""
 
@@ -17,8 +17,75 @@ permissions:
   contents: write
 
 jobs:
+  check-release-needed:
+    name: Check if Release Needed
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Determine Target Tag and Check Status
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "${{ inputs.tag_override }}" ]; then
+              TAG="${{ inputs.tag_override }}"
+            else
+              VER=$(cat VERSION 2>/dev/null | tr -d '[:space:]')
+              [ -z "$VER" ] && VER="1.0.0"
+              TAG="v${VER}"
+            fi
+            [[ "$TAG" != v* ]] && TAG="v${TAG}"
+            echo "Workflow dispatch trigger for tag: $TAG"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+            exit 0
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            TAG="${{ github.ref_name }}"
+            echo "Git tag pushed: $TAG"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Extract version from root VERSION file
+          VER=$(cat VERSION 2>/dev/null | tr -d '[:space:]')
+          [ -z "$VER" ] && VER="1.0.0"
+          TAG="v${VER}"
+          echo "Target tag: $TAG"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+          # Check if the release already exists on GitHub
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists on GitHub."
+            BEFORE_SHA="${{ github.event.before }}"
+            CHECK_BASE="HEAD~1"
+            if [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git rev-parse "$BEFORE_SHA" >/dev/null 2>&1; then
+              CHECK_BASE="$BEFORE_SHA"
+            fi
+            if git diff "$CHECK_BASE" HEAD --name-only | grep -qx "VERSION"; then
+              echo "VERSION was modified in this push. Rebuilding & updating release $TAG."
+              echo "should_release=true" >> $GITHUB_OUTPUT
+            else
+              echo "VERSION was not bumped in this push and release $TAG already exists. Skipping release."
+              echo "should_release=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "Release $TAG does not exist yet. Will build and publish initial release!"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          fi
+
   build-release:
     name: Build Release Binaries
+    needs: check-release-needed
+    if: needs.check-release-needed.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -54,9 +121,12 @@ jobs:
           GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: 0
         run: |
+          VERSION=$(cat VERSION 2>/dev/null | tr -d '[:space:]')
+          [ -z "$VERSION" ] && VERSION="1.0.0"
+          [[ "$VERSION" != v* ]] && VERSION="v${VERSION}"
           OUTPUT_NAME="cee-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}"
           mkdir -p dist
-          go build -ldflags="-s -w" -o "dist/${OUTPUT_NAME}" ./cmd/cee
+          go build -ldflags="-s -w -X main.Version=${VERSION} -X cee.io/pkg/api.Version=${VERSION}" -o "dist/${OUTPUT_NAME}" ./cmd/cee
           cd dist
           sha256sum "${OUTPUT_NAME}" > "${OUTPUT_NAME}.sha256"
 
@@ -68,7 +138,8 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
-    needs: build-release
+    needs: [check-release-needed, build-release]
+    if: needs.check-release-needed.outputs.should_release == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -81,37 +152,11 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Determine Release Tag from package.json
-        id: tag
-        run: |
-          # 1. If explicit manual override tag is passed
-          if [ -n "${{ inputs.tag_override }}" ]; then
-            TAG="${{ inputs.tag_override }}"
-            [[ "$TAG" != v* ]] && TAG="v${TAG}"
-            echo "Using manual override tag: $TAG"
-          # 2. If a git tag was pushed directly
-          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            TAG="${{ github.ref_name }}"
-            echo "Using pushed git tag: $TAG"
-          # 3. Read version from package.json as the auto-detection source
-          elif [ -f package.json ]; then
-            PKG_VER=$(jq -r '.version // empty' package.json)
-            if [ -n "$PKG_VER" ]; then
-              TAG="v${PKG_VER}"
-              echo "Auto-detected version from package.json: $TAG"
-            else
-              TAG="v1.0.0"
-            fi
-          else
-            TAG="v1.0.0"
-          fi
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-
       - name: Create or Update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          name: "CEE ${{ steps.tag.outputs.tag }}"
+          tag_name: ${{ needs.check-release-needed.outputs.tag }}
+          name: ${{ needs.check-release-needed.outputs.tag }}
           files: release-assets/*
           generate_release_notes: true
           make_latest: true

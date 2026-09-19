@@ -297,7 +297,7 @@ func newSubmitCmd() *cobra.Command {
 			}
 
 			bodyBytes, _ := json.Marshal(subReq)
-			endpoint := fmt.Sprintf("%s/submissions", strings.TrimRight(apiURL, "/"))
+			endpoint := resolveSubmissionsEndpoint(apiURL)
 			if wait {
 				endpoint += "?wait=true"
 			}
@@ -350,7 +350,7 @@ func newStatusCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			token := args[0]
-			endpoint := fmt.Sprintf("%s/submissions/%s", strings.TrimRight(apiURL, "/"), token)
+			endpoint := fmt.Sprintf("%s/%s", resolveSubmissionsEndpoint(apiURL), token)
 
 			req, _ := http.NewRequest(http.MethodGet, endpoint, nil)
 			if authToken != "" {
@@ -400,7 +400,7 @@ func submitCodeToRemote(apiURL, authToken, code string, lang *languages.Language
 		return err
 	}
 
-	endpoint := fmt.Sprintf("%s/submissions?wait=true", strings.TrimRight(apiURL, "/"))
+	endpoint := fmt.Sprintf("%s?wait=true", resolveSubmissionsEndpoint(apiURL))
 	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return err
@@ -469,4 +469,18 @@ func submitCodeToRemote(apiURL, authToken, code string, lang *languages.Language
 	}
 	fmt.Println("──────────────────────────────────────────────────────────")
 	return nil
+}
+
+func resolveSubmissionsEndpoint(apiURL string) string {
+	base := strings.TrimRight(apiURL, "/")
+	if strings.HasSuffix(base, "/v1/submissions") {
+		return base
+	}
+	if strings.HasSuffix(base, "/submissions") {
+		return strings.TrimSuffix(base, "/submissions") + "/v1/submissions"
+	}
+	if strings.HasSuffix(base, "/v1") {
+		return base + "/submissions"
+	}
+	return base + "/v1/submissions"
 }

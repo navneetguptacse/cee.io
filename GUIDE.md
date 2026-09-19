@@ -2,6 +2,12 @@
 
 A step-by-step beginner-friendly guide to executing code, building coding platforms, and integrating with CEE.
 
+[![User Guide](https://img.shields.io/badge/docs-user%20guide-orange.svg)](GUIDE.md)
+[![API Version](https://img.shields.io/badge/api-v1-blue.svg)](README.md#api-reference)
+[![Judge0 Compatible](https://img.shields.io/badge/API-Judge0%20Compatible-blue.svg)](https://judge0.com)
+[![Languages](https://img.shields.io/badge/languages-python%20%7C%20ts%20%7C%20c%2B%2B%20%7C%20rust%20%7C%20go-success.svg)](GUIDE.md#8-understanding-status-codes)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 ---
 
 ## Table of Contents
@@ -272,7 +278,7 @@ Expected response:
 When `wait=true` is provided, CEE holds the HTTP connection open and returns the completed execution result immediately:
 
 ```bash
-curl -X POST "http://localhost:3000/submissions?wait=true" \
+curl -X POST "http://localhost:3000/v1/submissions?wait=true" \
   -H "Content-Type: application/json" \
   -d '{
     "language_id": 71,
@@ -305,7 +311,7 @@ For high-concurrency applications:
 **Step 1: Submit code**
 
 ```bash
-curl -X POST "http://localhost:3000/submissions" \
+curl -X POST "http://localhost:3000/v1/submissions" \
   -H "Content-Type: application/json" \
   -d '{
     "language_id": 71,
@@ -318,7 +324,7 @@ Returns: `{"token": "4adc7ae9-6d80-4119-a9d1-d2a2432ae213"}`
 **Step 2: Fetch result using the token**
 
 ```bash
-curl "http://localhost:3000/submissions/4adc7ae9-6d80-4119-a9d1-d2a2432ae213"
+curl "http://localhost:3000/v1/submissions/4adc7ae9-6d80-4119-a9d1-d2a2432ae213"
 ```
 
 ---
@@ -403,18 +409,21 @@ CEE is 100% compatible with the Judge0 API standard.
 
 ```javascript
 async function runCode(code, languageId, input = "") {
-  const response = await fetch("http://localhost:3000/submissions?wait=true", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Auth-Token": "your-secret-token", // if auth is enabled
+  const response = await fetch(
+    "http://localhost:3000/v1/submissions?wait=true",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Auth-Token": "your-secret-token", // if auth is enabled
+      },
+      body: JSON.stringify({
+        source_code: code,
+        language_id: languageId,
+        stdin: input,
+      }),
     },
-    body: JSON.stringify({
-      source_code: code,
-      language_id: languageId,
-      stdin: input,
-    }),
-  });
+  );
 
   const result = await response.json();
 
@@ -438,7 +447,7 @@ runCode("print('Hello from Node.js!')", 71);
 import requests
 
 def execute_code(source_code: str, language_id: int, stdin: str = ""):
-    url = "http://localhost:3000/submissions?wait=true"
+    url = "http://localhost:3000/v1/submissions?wait=true"
     payload = {
         "source_code": source_code,
         "language_id": language_id,
@@ -507,7 +516,7 @@ Encode to Base64 and send:
 ```bash
 ZIP_B64=$(base64 < project.zip | tr -d '\n')
 
-curl -X POST "http://localhost:3000/submissions?wait=true" \
+curl -X POST "http://localhost:3000/v1/submissions?wait=true" \
   -H "Content-Type: application/json" \
   -d "{
     \"language_id\": 89,

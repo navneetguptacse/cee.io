@@ -19,7 +19,10 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-var appStartTime = time.Now()
+var (
+	appStartTime = time.Now()
+	Version      = "v1.0.0"
+)
 
 type Handler struct {
 	cfg      *config.Config
@@ -49,7 +52,7 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 // GET /about
 func (h *Handler) About(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]any{
-		"version":     "1.0.0",
+		"version":     Version,
 		"engine":      "CEE (Code Execution Engine in Go)",
 		"homepage":    "https://github.com/navneetguptacse/cee",
 		"maintainer":  "Navneet Gupta <navneetguptacse@gmail.com>",

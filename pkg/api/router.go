@@ -62,29 +62,37 @@ func NewRouter(cfg *config.Config, q queue.Queue, exec executor.Executor, keySto
 		pr.Group(func(ar chi.Router) {
 			ar.Use(RequireNormalAPI)
 
-			// System metadata
-			ar.Get("/about", h.About)
-			ar.Get("/system_info", h.SystemInfo)
-			ar.Get("/config_info", h.ConfigInfo)
-			ar.Get("/executor", h.ExecutorInfo)
-			ar.Get("/workers", h.Workers)
-			ar.Get("/statistics", h.Statistics)
+			mountAPIRoutes := func(r chi.Router) {
+				// System metadata
+				r.Get("/about", h.About)
+				r.Get("/system_info", h.SystemInfo)
+				r.Get("/config_info", h.ConfigInfo)
+				r.Get("/executor", h.ExecutorInfo)
+				r.Get("/workers", h.Workers)
+				r.Get("/statistics", h.Statistics)
 
-			// Statuses
-			ar.Get("/statuses", h.Statuses)
+				// Statuses
+				r.Get("/statuses", h.Statuses)
 
-			// Languages
-			ar.Get("/languages", h.Languages)
-			ar.Get("/languages/all", h.LanguagesAll)
-			ar.Get("/languages/{id}", h.LanguageByID)
+				// Languages
+				r.Get("/languages", h.Languages)
+				r.Get("/languages/all", h.LanguagesAll)
+				r.Get("/languages/{id}", h.LanguageByID)
 
-			// Submissions
-			ar.Route("/submissions", func(sr chi.Router) {
-				sr.Post("/", h.CreateSubmission)
-				sr.Post("/batch", h.CreateBatchSubmission)
-				sr.Get("/batch", h.GetBatchSubmission)
-				sr.Get("/{token}", h.GetSubmission)
-				sr.Delete("/{token}", h.DeleteSubmission)
+				// Submissions
+				r.Route("/submissions", func(sr chi.Router) {
+					sr.Post("/", h.CreateSubmission)
+					sr.Post("/batch", h.CreateBatchSubmission)
+					sr.Get("/batch", h.GetBatchSubmission)
+					sr.Get("/{token}", h.GetSubmission)
+					sr.Delete("/{token}", h.DeleteSubmission)
+				})
+			}
+
+			// Mount on root and /v1 prefix
+			mountAPIRoutes(ar)
+			ar.Route("/v1", func(vr chi.Router) {
+				mountAPIRoutes(vr)
 			})
 		})
 	})

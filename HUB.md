@@ -4,6 +4,8 @@ A high-performance, Judge0-compatible code execution engine and CLI built in Go.
 
 [![Docker Image](https://img.shields.io/badge/docker-navneetguptacse%2Fcee-blue.svg?logo=docker&logoColor=white)](https://hub.docker.com/r/navneetguptacse/cee)
 [![GHCR](https://img.shields.io/badge/ghcr.io-navneetguptacse%2Fcee.io-blue.svg?logo=github&logoColor=white)](https://github.com/navneetguptacse/cee.io/pkgs/container/cee.io)
+[![Publish Images](https://img.shields.io/github/actions/workflow/status/navneetguptacse/cee.io/publish-images.yml?branch=main&label=publish%20images)](https://github.com/navneetguptacse/cee.io/actions/workflows/publish-images.yml)
+[![Release](https://img.shields.io/badge/release-v1.0.0-blue.svg)](https://github.com/navneetguptacse/cee.io/releases)
 [![Multi-Platform](https://img.shields.io/badge/platform-linux%2Famd64%20%7C%20linux%2Farm64-lightgrey.svg)](https://hub.docker.com/r/navneetguptacse/cee)
 [![Go Version](https://img.shields.io/badge/go-1.22+-00ADD8?logo=go&logoColor=white)](https://golang.org)
 [![API: Judge0 Compatible](https://img.shields.io/badge/API-Judge0%20Compatible-blue.svg)](https://judge0.com)
@@ -47,7 +49,7 @@ The container starts with an embedded in-memory channel queue and begins accepti
 Send a synchronous code execution request using `curl`:
 
 ```bash
-curl -X POST "http://localhost:3000/submissions?wait=true" \
+curl -X POST "http://localhost:3000/v1/submissions?wait=true" \
   -H "Content-Type: application/json" \
   -d '{
     "language_id": 71,
@@ -138,7 +140,7 @@ docker run -d -p 3000:3000 \
 When `AUTH_TOKEN` is configured, clients must include the `X-Auth-Token` HTTP header in every request:
 
 ```bash
-curl -X POST "http://your-server-ip:3000/submissions?wait=true" \
+curl -X POST "http://your-server-ip:3000/v1/submissions?wait=true" \
   -H "Content-Type: application/json" \
   -H "X-Auth-Token: $AUTH_TOKEN" \
   -d '{

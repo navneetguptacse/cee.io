@@ -6,7 +6,9 @@ BIN_DIR     ?= ./bin
 BUILD_PATH  ?= $(BIN_DIR)/$(BINARY_NAME)
 MAIN_SRC    ?= ./cmd/cee
 GO          ?= go
-LDFLAGS     ?= -s -w
+RAW_VERSION ?= $(shell cat VERSION 2>/dev/null || echo "1.0.0")
+VERSION     ?= $(shell echo $(RAW_VERSION) | sed 's/^v*//' | sed 's/^/v/')
+LDFLAGS     ?= -s -w -X main.Version=$(VERSION) -X cee.io/pkg/api.Version=$(VERSION)
 PORT        ?= 3000
 INSTALL_DIR ?= /usr/local/bin
 EC2_HOST    ?= 100.52.188.50
@@ -115,5 +117,5 @@ deploy: dist
 	ssh $(EC2_USER)@$(EC2_HOST) "cd $(EC2_DIR) && docker compose -f docker-compose.prod.yml up -d --build"
 	@echo "Deployment complete! Checking health and install.sh..."
 	@curl -fsSL http://$(EC2_HOST)/health || echo "Note: Check server health"
-	@curl -fsSL http://$(EC2_HOST)/install.sh > /dev/null && echo "✓ /install.sh verified on remote server"
+	@curl -fsSL http://$(EC2_HOST)/install.sh > /dev/null && echo "[OK] /install.sh verified on remote server"
 

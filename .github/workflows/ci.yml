@@ -3,8 +3,16 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "mkdocs.yml"
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "mkdocs.yml"
   workflow_dispatch:
 
 jobs:
@@ -74,7 +82,7 @@ jobs:
           fi
 
           # 3. If VERSION was NOT changed, check if any code files were touched
-          CODE_CHANGES=$(echo "$CHANGED_FILES" | grep -v -E '^(\.github/.*|\.gitignore|\.dockerignore|LICENSE|.*\.md|docs/.*)$' || true)
+          CODE_CHANGES=$(echo "$CHANGED_FILES" | grep -v -E '^(\.github/.*|\.gitignore|\.dockerignore|LICENSE|.*\.md|docs/.*|mkdocs\.ya?ml)$' || true)
 
           if [ -n "$CODE_CHANGES" ]; then
             echo "::error::Code changes were detected, but VERSION was not bumped!"

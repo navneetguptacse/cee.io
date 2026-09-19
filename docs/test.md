@@ -6,9 +6,9 @@ This document contains comprehensive end-to-end testing scenarios to verify your
 [![Release](https://img.shields.io/badge/release-v1.0.0-blue.svg)](https://github.com/navneetguptacse/cee.io/releases)
 [![Docker Image](https://img.shields.io/badge/docker-navneetguptacse%2Fcee-blue.svg?logo=docker&logoColor=white)](https://hub.docker.com/r/navneetguptacse/cee)
 [![GHCR](https://img.shields.io/badge/ghcr.io-navneetguptacse%2Fcee.io-blue.svg?logo=github&logoColor=white)](https://github.com/navneetguptacse/cee.io/pkgs/container/cee.io)
-[![Test Suite](https://img.shields.io/badge/tests-e2e%20verification-success.svg)](TEST.md)
-[![Test Scenarios](https://img.shields.io/badge/scenarios-all%20checks%20passed-success.svg)](TEST.md#summary-checklist)
-[![Endpoint](https://img.shields.io/badge/endpoint-%2Fv1%2Fsubmissions-blue.svg)](TEST.md#11-set-test-environment-variables)
+[![Test Suite](https://img.shields.io/badge/tests-e2e%20verification-success.svg)](test.md)
+[![Test Scenarios](https://img.shields.io/badge/scenarios-all%20checks%20passed-success.svg)](test.md#summary-checklist)
+[![Endpoint](https://img.shields.io/badge/endpoint-%2Fv1%2Fsubmissions-blue.svg)](test.md#11-set-test-environment-variables)
 [![Judge0 Compatible](https://img.shields.io/badge/api-judge0%20compatible-blue.svg)](https://judge0.com)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 

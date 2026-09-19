@@ -21,7 +21,7 @@ CEE (Code Execution Engine) is a drop-in replacement for Judge0 built from scrat
 Multi-platform images (`linux/amd64` and `linux/arm64`) are published to both Docker Hub and GitHub Container Registry (GHCR).
 
 - **GitHub Repository**: [github.com/navneetguptacse/cee.io](https://github.com/navneetguptacse/cee.io)
-- **User Guide**: [GUIDE.md](https://github.com/navneetguptacse/cee.io/blob/main/GUIDE.md)
+- **User Guide**: [guide.md](https://github.com/navneetguptacse/cee.io/blob/main/guide.md)
 
 ---
 
@@ -214,6 +214,6 @@ services:
 ## Documentation & Source Code
 
 - **GitHub Repository**: [github.com/navneetguptacse/cee.io](https://github.com/navneetguptacse/cee.io)
-- **Step-by-Step User Guide**: [GUIDE.md](https://github.com/navneetguptacse/cee.io/blob/main/GUIDE.md)
-- **Comprehensive Test Suite**: [TEST.md](https://github.com/navneetguptacse/cee.io/blob/main/TEST.md)
+- **Step-by-Step User Guide**: [guide.md](https://github.com/navneetguptacse/cee.io/blob/main/guide.md)
+- **Comprehensive Test Suite**: [test.md](https://github.com/navneetguptacse/cee.io/blob/main/test.md)
 - **License**: MIT License

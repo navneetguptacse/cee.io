@@ -5,20 +5,20 @@ A step-by-step beginner-friendly guide to executing code, building coding platfo
 [![Release](https://img.shields.io/badge/release-v1.0.0-blue.svg)](https://github.com/navneetguptacse/cee.io/releases)
 [![Docker Image](https://img.shields.io/badge/docker-navneetguptacse%2Fcee-blue.svg?logo=docker&logoColor=white)](https://hub.docker.com/r/navneetguptacse/cee)
 [![GHCR](https://img.shields.io/badge/ghcr.io-navneetguptacse%2Fcee.io-blue.svg?logo=github&logoColor=white)](https://github.com/navneetguptacse/cee.io/pkgs/container/cee.io)
-[![User Guide](https://img.shields.io/badge/docs-user%20guide-orange.svg)](GUIDE.md)
-[![API Version](https://img.shields.io/badge/api-v1-blue.svg)](README.md#api-reference)
+[![User Guide](https://img.shields.io/badge/docs-user%20guide-orange.svg)](guide.md)
+[![API Version](https://img.shields.io/badge/api-v1-blue.svg)](api.md)
 [![Judge0 Compatible](https://img.shields.io/badge/api-judge0%20compatible-blue.svg)](https://judge0.com)
-[![Languages](https://img.shields.io/badge/languages-python%20%7C%20ts%20%7C%20c%2B%2B%20%7C%20rust%20%7C%20go-success.svg)](GUIDE.md#8-understanding-status-codes)
+[![Languages](https://img.shields.io/badge/languages-python%20%7C%20ts%20%7C%20c%2B%2B%20%7C%20rust%20%7C%20go-success.svg)](guide.md#8-understanding-status-codes)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ---
 
 ## Table of Contents
 
-1. [Quick Overview & Installation](#1-quick-overview--installation)
+1. [Quick Overview & Installation](#1-quick-overview-installation)
 2. [Using CEE as a Local CLI Tool](#2-using-cee-as-a-local-cli-tool)
 3. [Running CEE as a Local Server](#3-running-cee-as-a-local-server)
-4. [Authenticating and Managing Keys (`cee auth` & `cee token`)](#4-authenticating-and-managing-keys-cee-auth--cee-token)
+4. [Authenticating and Managing Keys (`cee auth` & `cee token`)](#4-authenticating-and-managing-keys-cee-auth-cee-token)
 5. [Integrating CEE with Your Application](#5-integrating-cee-with-your-application)
 6. [Running Multi-File Projects](#6-running-multi-file-projects)
 7. [Deploying CEE to Production](#7-deploying-cee-to-production)
@@ -587,7 +587,7 @@ Caddy will automatically request and install an SSL certificate for `cee.yourdom
 
 ### Option C: Prebuilt Container Image (Docker Hub & GHCR)
 
-Run the prebuilt multi-platform container directly without compiling Go. See [HUB.md](HUB.md) for complete container documentation and options:
+Run the prebuilt multi-platform container directly without compiling Go. See [docker.md](docker.md) for complete container documentation and options:
 
 ```bash
 docker run -d -p 3000:3000 \

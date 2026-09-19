@@ -9,10 +9,10 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![API: Judge0 Compatible](https://img.shields.io/badge/api-judge0%20compatible-blue.svg)](https://judge0.com)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-lightgrey.svg)]()
-[![User Guide](https://img.shields.io/badge/guide-step--by--step-orange.svg)](GUIDE.md)
-[![Contributing](https://img.shields.io/badge/contributing-guidelines-purple.svg)](CONTRIBUTE.md)
+[![User Guide](https://img.shields.io/badge/guide-step--by--step-orange.svg)](guide.md)
+[![Contributing](https://img.shields.io/badge/contributing-guidelines-purple.svg)](contribute.md)
 
-> Looking for a beginner-friendly tutorial? Read the complete [User Guide (GUIDE.md)](GUIDE.md). For Docker Hub & GHCR container documentation, see [HUB.md](HUB.md). For end-to-end verification scenarios, see [TEST.md](TEST.md). For contribution and versioning rules, see [CONTRIBUTE.md](CONTRIBUTE.md).
+> Looking for a beginner-friendly tutorial? Read the complete [User Guide (guide.md)](guide.md). For Docker Hub & GHCR container documentation, see [docker.md](docker.md). For end-to-end verification scenarios, see [test.md](test.md). For contribution and versioning rules, see [contribute.md](contribute.md).
 
 ---
 
@@ -504,7 +504,7 @@ All 16 test suites verify:
 
 ## Contributing
 
-We welcome contributions! Please read our [Contribution Guidelines (CONTRIBUTE.md)](CONTRIBUTE.md) for details on:
+We welcome contributions! Please read our [Contribution Guidelines (contribute.md)](contribute.md) for details on:
 
 - Automated versioning rules with the root `VERSION` file
 - Coding standards (including keeping all Go files under 500 lines)

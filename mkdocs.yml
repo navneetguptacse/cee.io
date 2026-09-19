@@ -1,0 +1,49 @@
+site_name: CEE Documentation
+site_description: High-Performance, Judge0-Compatible Code Execution Engine and CLI in Go
+site_author: Navneet Gupta
+site_url: https://navneetguptacse.github.io/cee.io/
+repo_url: https://github.com/navneetguptacse/cee.io
+repo_name: navneetguptacse/cee.io
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - tables
+  - attr_list
+  - md_in_html
+
+nav:
+  - Overview: index.md
+  - User Guide: guide.md
+  - Docker & Registries: docker.md
+  - Testing & Verification: test.md
+  - Contributing & SemVer: contribute.md
+  - REST API Reference: api.md

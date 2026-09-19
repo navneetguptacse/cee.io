@@ -6,6 +6,10 @@ on:
       - main
     tags:
       - "v*"
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "mkdocs.yml"
   workflow_dispatch:
     inputs:
       tag_override:
@@ -158,5 +162,7 @@ jobs:
           tag_name: ${{ needs.check-release-needed.outputs.tag }}
           name: ${{ needs.check-release-needed.outputs.tag }}
           files: release-assets/*
-          generate_release_notes: true
+          body: |
+            - Documentation & API guides: https://navneetguptacse.github.io/cee.io/
+            - Changelog: https://github.com/navneetguptacse/cee.io/commits/${{ needs.check-release-needed.outputs.tag }}
           make_latest: true
